@@ -1,5 +1,4 @@
 const API_BASE = String(window.NAVIGUIDE_API_BASE || "/api").replace(/\/$/, "");
-const ADMIN_URL = String(window.NAVIGUIDE_ADMIN_URL || "/admin/");
 const THEME_STORAGE_KEY = "naviguide-theme";
 
 const FALLBACK_DATA = {
@@ -29,8 +28,6 @@ let searchTerm = "";
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeTheme();
-  const adminLink = document.querySelector("#admin-link");
-  if (adminLink) adminLink.href = ADMIN_URL;
   document.querySelector("#footer-year").textContent = String(new Date().getFullYear());
   document.querySelector("#search-input")?.addEventListener("input", (event) => { searchTerm = event.target.value.trim().toLowerCase(); renderProjects(); });
   document.querySelector("#clear-filter")?.addEventListener("click", () => { searchTerm = ""; activeCategory = "all"; document.querySelector("#search-input").value = ""; renderAll(); });
@@ -67,23 +64,15 @@ function normalizeLink(item) {
     if (!step || typeof step !== "object") return "";
     return [step.title, step.content || step.text || step.description].filter(Boolean).join("：");
   }).filter(Boolean);
-  return { ...item, steps, tips: item.tips || item.adminNote || "", cover: item.cover || item.coverUrl || "" };
+  return { ...item, steps, tips: item.tips || "", cover: item.cover || item.coverUrl || "" };
 }
 
 function splitSteps(value) { return String(value || "").split(/\n|。/).map((part) => part.trim()).filter(Boolean).slice(0, 5); }
 function comparePosition(left, right) { return Number(left.position || 0) - Number(right.position || 0) || String(left.name || left.title).localeCompare(String(right.name || right.title), "zh-CN"); }
 
 function renderAll() {
-  renderStats(); renderCategoryList(); renderProjects(); refreshIcons();
-}
-
-function renderStats() {
-  const count = navigationData.links.length;
-  document.querySelector("#category-count").textContent = navigationData.categories.length;
-  document.querySelector("#project-count").textContent = count;
   document.querySelector("#category-total-label").textContent = `${navigationData.categories.length} 类`;
-  document.querySelector("#updated-count").textContent = Math.min(count, 12);
-  document.querySelector("#today-count").textContent = "--";
+  renderCategoryList(); renderProjects(); refreshIcons();
 }
 
 function renderCategoryList() {
