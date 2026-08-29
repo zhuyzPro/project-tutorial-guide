@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="指南所：按生活场景整理的项目使用教程与实操步骤。" />
+    <title>指南所 · 项目教程索引</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <script>
+      window.NAVIGUIDE_API_BASE = window.NAVIGUIDE_API_BASE || "/api";
+      window.NAVIGUIDE_ADMIN_URL = window.NAVIGUIDE_ADMIN_URL || "/admin/";
+      (() => { try { if (localStorage.getItem("naviguide-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch {} })();
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="lucide-mini.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <div class="site-shell">
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="指南所首页">
+          <span class="brand-mark" aria-hidden="true"><i data-lucide="notebook-pen"></i></span>
+          <span class="brand-copy"><strong>指南所</strong><small>FIELD GUIDE / PROJECT TUTORIALS</small></span>
+        </a>
+        <nav class="top-nav" aria-label="主导航">
+          <a class="top-nav-link active" href="#projects">项目索引</a>
+          <a class="top-nav-link" href="#about">使用说明</a>
+          <a id="admin-link" class="admin-link" href="/admin/" target="_blank" rel="noopener noreferrer"><i data-lucide="shield-check" aria-hidden="true"></i><span>管理后台</span></a>
+          <button id="theme-toggle" class="icon-button" type="button" title="切换深色模式" aria-label="切换深色模式"><i data-lucide="moon" aria-hidden="true"></i></button>
+        </nav>
+      </header>
+
+      <main id="main">
+        <section class="hero" aria-labelledby="page-title">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>项目教程索引 · 持续整理</p>
+            <h1 id="page-title">把每个项目，<br /><em>讲清楚。</em></h1>
+            <p class="hero-lede">从注册、领取到复盘，把零散的操作经验整理成一步一步能照做的项目手册。</p>
+            <div class="hero-actions"><a class="primary-button" href="#projects"><span>开始浏览</span><i data-lucide="arrow-down-right" aria-hidden="true"></i></a><span class="update-note"><i data-lucide="sparkles" aria-hidden="true"></i><span>本周更新 <strong id="updated-count">--</strong> 篇</span></span></div>
+          </div>
+          <div class="hero-index" aria-label="索引概览"><div class="index-stamp"><span>FG</span><small>NO. 026</small></div><div class="index-rule"></div><dl class="hero-stats"><div><dt>分类</dt><dd id="category-count">--</dd></div><div><dt>项目</dt><dd id="project-count">--</dd></div><div><dt>今日访问</dt><dd id="today-count">--</dd></div></dl><p class="hero-index-caption">每条指南都经过实际路径验证，优先保留关键动作、注意事项和入口。</p></div>
+        </section>
+
+        <section id="projects" class="directory" aria-labelledby="directory-title">
+          <div class="directory-toolbar"><div><p class="section-kicker">01 / DIRECTORY</p><h2 id="directory-title">按场景找到项目</h2></div><div class="toolbar-tools"><label class="search-box"><i data-lucide="search" aria-hidden="true"></i><span class="sr-only">搜索项目</span><input id="search-input" type="search" placeholder="搜索项目、关键词" autocomplete="off" /></label><button id="clear-filter" class="text-button" type="button" hidden>清除筛选</button></div></div>
+          <div class="category-layout"><aside class="category-index" aria-label="项目分类"><div class="category-index-head"><span>分类索引</span><span id="category-total-label">--</span></div><div id="category-list" class="category-list"></div><div class="category-hint"><i data-lucide="mouse-pointer-2" aria-hidden="true"></i><span>选择分类，右侧只显示相关教程。</span></div></aside><section class="project-results" aria-live="polite"><div class="results-heading"><div><span id="active-category-label" class="results-kicker">全部项目</span><h3 id="results-title">最新整理</h3></div><span id="results-count" class="results-count">-- 篇指南</span></div><div id="project-grid" class="project-grid"><p class="load-state" role="status">正在整理项目索引...</p></div></section></div>
+        </section>
+
+        <section id="about" class="about-band" aria-labelledby="about-title"><div class="about-label"><span class="section-kicker">02 / HOW TO READ</span><span class="about-line" aria-hidden="true"></span></div><div class="about-copy"><h2 id="about-title">先看路径，再动手。</h2><p>每篇教程都把准备材料、关键步骤和容易踩坑的地方放在同一页。入口状态会随时更新，具体规则以项目页面为准。</p></div><div class="about-points"><div><span>01</span><strong>选分类</strong><small>按生活场景定位</small></div><div><span>02</span><strong>看教程</strong><small>打开项目的完整步骤</small></div><div><span>03</span><strong>去入口</strong><small>准备好再开始操作</small></div></div></section>
+      </main>
+      <footer class="site-footer"><span>指南所 / FIELD GUIDE</span><span>内容仅作经验整理，项目规则以官方页面为准</span><span id="footer-year">2026</span></footer>
+    </div>
+
+    <dialog id="project-dialog" class="project-dialog" aria-labelledby="dialog-title"><div class="dialog-frame"><button id="close-dialog" class="dialog-close" type="button" title="关闭教程" aria-label="关闭教程"><i data-lucide="x" aria-hidden="true"></i></button><div id="dialog-content"></div></div></dialog>
+  </body>
+</html>

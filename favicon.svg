@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">指南所</title>
+  <rect width="64" height="64" rx="12" fill="#f4f1e9" />
+  <path d="M16 13h26c4 0 7 3 7 7v31H23c-4 0-7-3-7-7V13Z" fill="#18222b" />
+  <path d="M23 21h19M23 29h15M23 37h19" stroke="#f4f1e9" stroke-width="3" stroke-linecap="square" />
+  <path d="m42 43 10-10 4 4-10 10-6 2 2-6Z" fill="#ee6b3b" />
+</svg>

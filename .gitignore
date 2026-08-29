@@ -1,0 +1,8 @@
+server/*.sqlite
+server/*.sqlite-shm
+server/*.sqlite-wal
+server/test-cookies.txt
+.env
+.env.local
+.playwright-cli/
+output/
