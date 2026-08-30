@@ -1,0 +1,26 @@
+[Unit]
+Description=Project tutorial guide API and admin
+After=network.target
+
+[Service]
+Type=simple
+User=projectguide
+Group=projectguide
+WorkingDirectory=/opt/project-tutorial-guide
+Environment=NODE_ENV=production
+Environment=DB_PATH=/var/lib/project-tutorial-guide/guide.sqlite
+EnvironmentFile=/etc/project-tutorial-guide/project-tutorial-guide.env
+ExecStart=/usr/bin/node /opt/project-tutorial-guide/server/wayfind-server.js
+Restart=on-failure
+RestartSec=3
+StateDirectory=project-tutorial-guide
+StateDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/project-tutorial-guide
+
+[Install]
+WantedBy=multi-user.target

@@ -8,7 +8,12 @@
     <title>指南所 · 项目教程导航</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <script>
-      window.NAVIGUIDE_API_BASE = window.NAVIGUIDE_API_BASE || "/api";
+      // The published GitHub Pages site reads live data from the separately
+      // deployed API. Local Node development continues to use its own /api.
+      const guidePagesHosts = new Set(["zhuyz.cloud", "zhuyzpro.github.io"]);
+      window.NAVIGUIDE_API_BASE = window.NAVIGUIDE_API_BASE || (guidePagesHosts.has(window.location.hostname)
+        ? "https://zhuyz.art/project-tutorial-guide-api"
+        : "/api");
       (() => { try { if (localStorage.getItem("naviguide-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch {} })();
     </script>
     <link rel="stylesheet" href="styles.css" />

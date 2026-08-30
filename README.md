@@ -42,6 +42,10 @@ node server/wayfind-server.js
 
 如果前台和后台同域部署，保持默认 `/api` 即可。若前台发布在 GitHub Pages，请在服务端设置 `PUBLIC_ORIGINS=https://<GitHub 用户名>.github.io`，并在前台页面加载前将 `window.NAVIGUIDE_API_BASE` 配置为服务端完整 API 地址。
 
+## 当前生产部署
+
+生产环境使用独立 Node/SQLite 服务，部署配置保存在 `server/project-tutorial-guide.service` 和 `server/project-tutorial-guide.nginx.conf`。前台 GitHub Pages 会自动读取 `https://zhuyz.art/project-tutorial-guide-api`；后台通过 `https://zhuyz.art/project-tutorial-guide-admin/` 管理内容。数据库、会话和服务均与其他站点隔离。
+
 ## 目录结构
 
 ```text

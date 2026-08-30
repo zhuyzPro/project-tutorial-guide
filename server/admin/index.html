@@ -7,7 +7,13 @@
     <meta name="color-scheme" content="light dark" />
     <title>指南所后台</title>
     <script>
-      window.NAVIGUIDE_API_BASE = window.NAVIGUIDE_API_BASE || "/api";
+      // The public reverse proxy exposes this app below a dedicated prefix.
+      // Keep /api for direct local development on the Node server.
+      const isProductionProxy = window.location.hostname === "zhuyz.art"
+        && window.location.pathname.startsWith("/project-tutorial-guide-admin/");
+      window.NAVIGUIDE_API_BASE = window.NAVIGUIDE_API_BASE || (isProductionProxy
+        ? "/project-tutorial-guide-api"
+        : "/api");
       (() => {
         try {
           if (localStorage.getItem("guide-admin-theme") === "dark") document.documentElement.dataset.theme = "dark";
