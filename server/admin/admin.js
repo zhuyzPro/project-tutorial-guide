@@ -30,6 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("click", handleClick);
   document.addEventListener("submit", handleSubmit);
   document.addEventListener("change", handleChange);
+  document.addEventListener("input", handleInput);
   document.addEventListener("keydown", handleKeydown);
   boot();
 });
@@ -115,9 +116,13 @@ async function loadStats() {
 function render() {
   const app = document.querySelector("#app");
   if (!app) return;
+  document.body.classList.toggle("modal-open", Boolean(state.modal));
   app.className = "";
   app.innerHTML = state.session ? renderShell() : renderLogin();
   refreshIcons();
+  if (state.modal?.type === "project") {
+    window.requestAnimationFrame(() => updateCoverPreview(document.querySelector("[data-control='project-cover']")?.value || ""));
+  }
 }
 
 function renderLogin() {
@@ -363,29 +368,33 @@ function renderProjectModal(link) {
   const tutorial = link.guide || stepsToText(link.steps);
   const toneOptions = TONES.map(([tone, label]) => `<label class="tone-option tone-${tone}"><input type="radio" name="tone" value="${tone}" ${link.tone === tone ? "checked" : ""} /><span class="tone-swatch" aria-hidden="true"></span>${label}</label>`).join("");
   const noCategories = state.categories.length === 0;
-  return `<div class="modal-backdrop" data-action="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="project-editor-title">
-    <header class="modal-header"><div><h2 id="project-editor-title">${existing ? "编辑项目教程" : "新建项目教程"}</h2><p>保存后，内容会同步到前台项目索引。</p></div><button class="icon-button modal-close" type="button" data-action="close-modal" title="关闭" aria-label="关闭"><i data-lucide="x" aria-hidden="true"></i></button></header>
-    <form class="editor-form" data-form="project">
-      <div class="form-grid">
-        <div class="field"><label for="project-category">所属分类</label><select id="project-category" name="category" required ${noCategories ? "disabled" : ""}>${categoryOptions}</select>${noCategories ? `<p class="field-help">请先创建一个分类。</p>` : ""}</div>
-        <div class="field"><label for="project-title">项目标题</label><input id="project-title" name="title" maxlength="80" value="${escapeAttribute(link.title || "")}" placeholder="例如：奶茶首单优惠" required /></div>
-        <div class="field"><label for="project-status">状态文案</label><input id="project-status" name="status" maxlength="24" value="${escapeAttribute(link.status || "待核实")}" placeholder="例如：实测可用" required /></div>
-        <div class="field"><label for="project-mark">显示标记</label><input id="project-mark" name="mark" maxlength="12" value="${escapeAttribute(link.mark || nextMark())}" placeholder="例如：01" required /><p class="field-help">用于前台卡片上的短标记。</p></div>
-        <div class="field wide"><label for="project-description">简介</label><textarea id="project-description" name="description" maxlength="240" placeholder="一句话说明这个项目能帮用户做什么" required>${escapeHtml(link.description || "")}</textarea></div>
-        <div class="field"><label for="project-note">说明</label><input id="project-note" name="note" maxlength="80" value="${escapeAttribute(link.note || "")}" placeholder="例如：准备时间 · 5 分钟" required /></div>
-        <div class="field"><label for="project-url">入口 URL</label><input id="project-url" name="url" type="url" maxlength="2048" value="${escapeAttribute(link.url || "")}" placeholder="https://example.com" required /></div>
-        <div class="field wide"><label for="project-cover">封面图 URL</label><input id="project-cover" name="cover" maxlength="2048" value="${escapeAttribute(link.cover || link.image || "")}" placeholder="https://... 或 /images/cover.jpg" /><p class="field-help">支持 http、https 或站内路径；留空则用项目标记显示。</p></div>
+  const cover = link.cover || link.image || "";
+  const mark = link.mark || nextMark();
+  return `<div class="modal-backdrop editor-backdrop" data-action="modal-backdrop"><section class="modal editor-drawer" role="dialog" aria-modal="true" aria-labelledby="project-editor-title">
+    <header class="modal-header editor-header"><div><span class="editor-kicker">项目教程</span><h2 id="project-editor-title">${existing ? "编辑项目教程" : "新建项目教程"}</h2><p>保存后，内容会同步到前台项目索引。</p></div><button class="icon-button modal-close" type="button" data-action="close-modal" title="关闭编辑器" aria-label="关闭编辑器"><i data-lucide="x" aria-hidden="true"></i></button></header>
+    <form class="editor-form editor-project-form" data-form="project">
+      <div class="editor-scroll">
+        <section class="editor-section editor-section--first" aria-labelledby="project-basics-title"><div class="editor-section-heading"><div><h3 id="project-basics-title" class="editor-section-title">基础信息</h3><p>设置教程所属位置和列表中最先看到的信息。</p></div></div>
+          <div class="form-grid">
+            <div class="field field--category"><label for="project-category">所属分类</label><select id="project-category" name="category" required ${noCategories ? "disabled" : ""}>${categoryOptions}</select>${noCategories ? `<p class="field-help">请先创建一个分类。</p>` : ""}</div>
+            <div class="field field--title"><label for="project-title">项目标题</label><input id="project-title" name="title" maxlength="80" value="${escapeAttribute(link.title || "")}" placeholder="例如：奶茶首单优惠" required /></div>
+            <div class="field field--status"><label for="project-status">状态文案</label><input id="project-status" name="status" maxlength="24" value="${escapeAttribute(link.status || "待核实")}" placeholder="例如：实测可用" required /></div>
+            <div class="field field--mark"><label for="project-mark">显示标记</label><input id="project-mark" name="mark" data-control="project-mark" maxlength="12" value="${escapeAttribute(mark)}" placeholder="例如：01" required /><p class="field-help">显示在前台卡片上。</p></div>
+          </div>
+        </section>
+        <section class="editor-section" aria-labelledby="project-presentation-title"><div class="editor-section-heading"><div><h3 id="project-presentation-title" class="editor-section-title">前台展示</h3><p>简洁说明项目价值，并配置用户打开教程后的入口。</p></div></div><div class="form-grid">
+          <div class="field wide field--description"><label for="project-description">简介</label><textarea id="project-description" name="description" maxlength="240" placeholder="一句话说明这个项目能帮用户做什么" required>${escapeHtml(link.description || "")}</textarea></div>
+          <div class="field field--note"><label for="project-note">说明</label><input id="project-note" name="note" maxlength="80" value="${escapeAttribute(link.note || "")}" placeholder="例如：准备时间 · 5 分钟" required /></div>
+          <div class="field field--url"><label for="project-url">入口 URL</label><input id="project-url" name="url" type="url" maxlength="2048" value="${escapeAttribute(link.url || "")}" placeholder="https://example.com" required /></div>
+          <div class="field wide field--cover"><label for="project-cover">封面图 URL</label><div class="cover-field-layout"><div><div class="cover-input-row"><input id="project-cover" name="cover" data-control="project-cover" maxlength="2048" value="${escapeAttribute(cover)}" placeholder="https://... 或 /images/cover.jpg" /><button class="icon-button cover-clear" type="button" data-action="clear-cover" title="清除封面链接" aria-label="清除封面链接" ${cover ? "" : "disabled"}><i data-lucide="x" aria-hidden="true"></i></button></div><p class="field-help">支持 http、https 或站内路径；留空则用项目标记显示。</p></div><div id="project-cover-preview" class="project-cover-preview" data-mark="${escapeAttribute(mark)}" aria-live="polite"><span class="cover-preview-mark">${escapeHtml(mark)}</span><span class="cover-preview-copy">${cover ? "正在加载预览" : "未设置封面"}</span></div></div></div>
+        </div></section>
+        <section class="editor-section" aria-labelledby="project-guide-title"><div class="editor-section-heading"><div><h3 id="project-guide-title" class="editor-section-title">教程内容</h3><p>每一行会被整理成前台的一条操作步骤。</p></div></div><div class="form-grid">
+          <div class="field wide"><label for="project-guide">教程正文</label><textarea id="project-guide" class="tall" name="guide" maxlength="100000" placeholder="每行一条操作步骤；会自动同步为前台的步骤列表。">${escapeHtml(tutorial)}</textarea><p class="field-help">最多支持 100 行步骤。</p></div>
+          <div class="field wide"><label for="project-tips">小提示</label><textarea id="project-tips" name="tips" maxlength="2000" placeholder="提醒用户注意条件、时效或常见问题。">${escapeHtml(link.tips || "")}</textarea></div>
+        </div></section>
+        <details class="editor-details"><summary><span><strong>视觉和内部信息</strong><small>设置卡片色调，或记录仅后台可见的备注。</small></span><i data-lucide="chevron-down" aria-hidden="true"></i></summary><div class="editor-details-body"><div class="form-grid"><div class="field wide"><span class="field-label">色调</span><div class="tone-options">${toneOptions}</div></div><div class="field wide"><label for="project-admin-note">后台备注</label><textarea id="project-admin-note" name="adminNote" maxlength="500" placeholder="仅后台可见，例如来源、复核日期或待补充内容。">${escapeHtml(link.adminNote || "")}</textarea></div></div></div></details>
       </div>
-      <section class="editor-section"><h3 class="editor-section-title">教程内容</h3><div class="form-grid">
-        <div class="field wide"><label for="project-guide">教程正文</label><textarea id="project-guide" class="tall" name="guide" maxlength="100000" placeholder="每行一条操作步骤；会自动同步为前台的步骤列表。">${escapeHtml(tutorial)}</textarea><p class="field-help">每行会作为一个前台教程步骤，最多 100 行。</p></div>
-        <div class="field wide"><label for="project-tips">小提示</label><textarea id="project-tips" name="tips" maxlength="2000" placeholder="提醒用户注意条件、时效或常见问题。">${escapeHtml(link.tips || "")}</textarea></div>
-      </div></section>
-      <section class="editor-section"><h3 class="editor-section-title">后台信息</h3><div class="form-grid">
-        <div class="field wide"><span class="field-label">色调</span><div class="tone-options">${toneOptions}</div></div>
-        <div class="field wide"><label for="project-admin-note">后台备注</label><textarea id="project-admin-note" name="adminNote" maxlength="500" placeholder="仅后台可见，例如来源、复核日期或待补充内容。">${escapeHtml(link.adminNote || "")}</textarea></div>
-        <label class="toggle-field wide"><input name="enabled" type="checkbox" ${link.enabled !== false ? "checked" : ""} /><span class="toggle-track" aria-hidden="true"></span><span class="toggle-copy">在前台显示<small>关闭后，前台不再展示这篇教程。</small></span></label>
-      </div></section>
-      <footer class="form-footer"><span class="form-footer-note">${existing ? "编辑会保留原排序位置。" : "新教程会添加到所属分类的末尾。"}</span><div class="modal-actions"><button class="secondary-button" type="button" data-action="close-modal">取消</button><button class="primary-button" type="submit" ${noCategories ? "disabled" : ""}><span>保存教程</span><i data-lucide="check" aria-hidden="true"></i></button></div></footer>
+      <footer class="form-footer editor-footer"><label class="toggle-field editor-visibility"><input name="enabled" type="checkbox" ${link.enabled !== false ? "checked" : ""} /><span class="toggle-track" aria-hidden="true"></span><span class="toggle-copy">在前台显示<small>关闭后，前台不再展示这篇教程。</small></span></label><span class="form-footer-note">${existing ? "编辑会保留原排序位置。" : "新教程会添加到所属分类的末尾。"}</span><div class="modal-actions"><button class="secondary-button" type="button" data-action="close-modal">取消</button><button class="primary-button" type="submit" ${noCategories ? "disabled" : ""}><span>保存教程</span><i data-lucide="check" aria-hidden="true"></i></button></div></footer>
     </form>
   </section></div>`;
 }
@@ -443,6 +452,14 @@ async function handleClick(event) {
     if (action === "refresh-navigation") return refreshNavigation();
     if (action === "new-project") return openProjectEditor();
     if (action === "new-category") return openCategoryEditor();
+    if (action === "clear-cover") {
+      const cover = document.querySelector("[data-control='project-cover']");
+      if (!cover) return;
+      cover.value = "";
+      updateCoverPreview("");
+      cover.focus();
+      return;
+    }
     if (action === "close-modal" || action === "modal-backdrop") {
       state.modal = null;
       render();
@@ -491,6 +508,20 @@ function handleChange(event) {
   if (control.matches("[data-control='project-category']")) {
     state.projectCategory = control.value;
     render();
+  }
+}
+
+function handleInput(event) {
+  const control = event.target;
+  if (control.matches("[data-control='project-cover']")) {
+    updateCoverPreview(control.value);
+    return;
+  }
+  if (control.matches("[data-control='project-mark']")) {
+    const preview = document.querySelector("#project-cover-preview");
+    if (!preview) return;
+    preview.dataset.mark = control.value.trim() || "指";
+    updateCoverPreview(document.querySelector("[data-control='project-cover']")?.value || "");
   }
 }
 
@@ -781,6 +812,44 @@ function formatTimelineTime(value) {
 
 function stepsToText(steps) {
   return array(steps).map((step) => typeof step === "string" ? step : [step?.title, step?.content || step?.text || step?.description].filter(Boolean).join("：")).filter(Boolean).join("\n");
+}
+
+function updateCoverPreview(value) {
+  const preview = document.querySelector("#project-cover-preview");
+  if (!preview) return;
+  const text = String(value || "").trim();
+  const clearButton = document.querySelector("[data-action='clear-cover']");
+  if (clearButton) clearButton.disabled = !text;
+  const imageUrl = safeImageUrl(text);
+  const mark = preview.dataset.mark || "指";
+  if (!imageUrl) {
+    renderCoverFallback(preview, mark, text ? "暂不支持该链接格式" : "未设置封面", Boolean(text));
+    return;
+  }
+  const image = document.createElement("img");
+  image.alt = "封面预览";
+  image.addEventListener("error", () => {
+    if (image.isConnected) renderCoverFallback(preview, mark, "图片无法加载", true);
+  });
+  image.addEventListener("load", () => {
+    if (image.isConnected) preview.classList.remove("has-error");
+  });
+  image.src = imageUrl;
+  preview.classList.add("has-image");
+  preview.classList.remove("has-error");
+  preview.replaceChildren(image);
+}
+
+function renderCoverFallback(preview, mark, label = "未设置封面", isError = false) {
+  preview.classList.remove("has-image");
+  preview.classList.toggle("has-error", isError);
+  const markElement = document.createElement("span");
+  markElement.className = "cover-preview-mark";
+  markElement.textContent = String(mark || "指").slice(0, 12);
+  const copy = document.createElement("span");
+  copy.className = "cover-preview-copy";
+  copy.textContent = label;
+  preview.replaceChildren(markElement, copy);
 }
 
 function safeImageUrl(value) {
