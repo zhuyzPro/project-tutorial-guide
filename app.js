@@ -25,15 +25,17 @@ const FALLBACK_DATA = {
 let navigationData = { categories: [], links: [] };
 let activeCategory = "all";
 let searchTerm = "";
+let lastTrigger = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeTheme();
   document.querySelector("#footer-year").textContent = String(new Date().getFullYear());
-  document.querySelector("#search-input")?.addEventListener("input", (event) => { searchTerm = event.target.value.trim().toLowerCase(); renderProjects(); });
+  document.querySelector("#search-input")?.addEventListener("input", (event) => { searchTerm = event.target.value.trim().toLowerCase(); renderCategoryList(); renderProjects(); });
   document.querySelector("#clear-filter")?.addEventListener("click", () => { searchTerm = ""; activeCategory = "all"; document.querySelector("#search-input").value = ""; renderAll(); });
   document.querySelector("#close-dialog")?.addEventListener("click", closeDialog);
   document.querySelector("#project-dialog")?.addEventListener("click", (event) => { if (event.target.id === "project-dialog") closeDialog(); });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDialog(); });
+  document.querySelector("#project-dialog")?.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && document.querySelector("#project-dialog")?.open) closeDialog(); });
   loadNavigationData();
   refreshIcons();
 });
@@ -60,10 +62,14 @@ function normalizeData(data) {
 function normalizeLink(item) {
   const rawSteps = Array.isArray(item.steps) ? item.steps : splitSteps(item.tutorial || item.content || item.description);
   const steps = rawSteps.map((step) => {
-    if (typeof step === "string") return step.trim();
-    if (!step || typeof step !== "object") return "";
-    return [step.title, step.content || step.text || step.description].filter(Boolean).join("：");
-  }).filter(Boolean);
+    if (typeof step === "string") return { title: "", content: step.trim(), image: "" };
+    if (!step || typeof step !== "object") return null;
+    return {
+      title: String(step.title || "").trim(),
+      content: String(step.content || step.text || step.description || "").trim(),
+      image: String(step.image || step.imageUrl || "").trim(),
+    };
+  }).filter((step) => step && (step.title || step.content || step.image));
   return { ...item, steps, tips: item.tips || "", cover: item.cover || item.coverUrl || "" };
 }
 
@@ -77,46 +83,98 @@ function renderAll() {
 
 function renderCategoryList() {
   const list = document.querySelector("#category-list");
-  list.innerHTML = `<button class="category-item ${activeCategory === "all" ? "active" : ""}" type="button" data-category="all"><span class="category-number">00</span><span class="category-name">全部项目</span><span class="category-count">${navigationData.links.length}</span></button>` + navigationData.categories.map((category, index) => {
-    const count = navigationData.links.filter((link) => link.category === category.name).length;
-    return `<button class="category-item ${activeCategory === category.id ? "active" : ""}" type="button" data-category="${escapeAttribute(category.id)}"><span class="category-number">${String(index + 1).padStart(2, "0")}</span><span class="category-name">${escapeHtml(category.name)}</span><span class="category-count">${count}</span></button>`;
-  }).join("");
-  list.querySelectorAll("[data-category]").forEach((button) => button.addEventListener("click", () => {
-    activeCategory = button.dataset.category;
+  list.innerHTML = navigationData.categories.map((category, index) => {
+    const categoryLinks = navigationData.links.filter((link) => link.category === category.name);
+    const matchingLinks = searchTerm ? categoryLinks.filter(matchesSearch) : categoryLinks;
+    if (searchTerm && !matchingLinks.length) return "";
+    const count = matchingLinks.length;
+    const tone = toneForIndex(index);
+    const current = activeCategory === category.id ? ' aria-current="location"' : "";
+    return `<a class="section-nav-link tone-${tone} ${activeCategory === category.id ? "active" : ""}" href="#category-${escapeAttribute(category.id)}" data-category="${escapeAttribute(category.id)}"${current} style="--nav-tone: var(--${tone});"><span class="nav-index">${String(index + 1).padStart(2, "0")}</span><span>${escapeHtml(category.name)}</span><small>${count}</small></a>`;
+  }).filter(Boolean).join("");
+  list.querySelectorAll("[data-category]").forEach((link) => link.addEventListener("click", () => {
+    activeCategory = link.dataset.category;
     const category = navigationData.categories.find((item) => item.id === activeCategory);
     if (category) trackCategory(category);
-    renderAll();
-    document.querySelector("#projects")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    list.querySelectorAll("[data-category]").forEach((item) => {
+      const isActive = item === link;
+      item.classList.toggle("active", isActive);
+      if (isActive) item.setAttribute("aria-current", "location");
+      else item.removeAttribute("aria-current");
+    });
   }));
 }
 
 function renderProjects() {
-  const selected = navigationData.categories.find((category) => category.id === activeCategory);
-  let projects = navigationData.links.filter((link) => !selected || link.category === selected.name);
-  if (searchTerm) projects = projects.filter((link) => [link.title, link.description, link.note, link.category].some((value) => String(value || "").toLowerCase().includes(searchTerm)));
-  document.querySelector("#active-category-label").textContent = selected?.name || "全部项目";
-  document.querySelector("#results-title").textContent = selected?.description || (searchTerm ? "搜索结果" : "最新整理");
-  document.querySelector("#results-count").textContent = `${projects.length} 篇指南`;
-  document.querySelector("#clear-filter").hidden = !(searchTerm || activeCategory !== "all");
   const grid = document.querySelector("#project-grid");
-  grid.innerHTML = projects.length ? projects.map(renderProjectCard).join("") : '<p class="load-state">没有找到匹配的项目，换个关键词试试。</p>';
-  grid.querySelectorAll("[data-project-id]").forEach((card) => card.addEventListener("click", () => openDialog(card.dataset.projectId)));
+  const sections = navigationData.categories.map((category, index) => {
+    let projects = navigationData.links.filter((link) => link.category === category.name);
+    if (searchTerm) projects = projects.filter(matchesSearch);
+    if (searchTerm && !projects.length) return "";
+    return renderProjectSection(category, projects, index);
+  }).filter(Boolean).join("");
+  document.querySelector("#clear-filter").hidden = !searchTerm;
+  grid.innerHTML = sections || '<p class="load-state">没有找到匹配的项目，换个关键词试试。</p>';
+  grid.querySelectorAll("[data-project-id]").forEach((card) => {
+    card.addEventListener("click", () => openDialog(card.dataset.projectId, card));
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openDialog(card.dataset.projectId, card);
+      }
+    });
+  });
   refreshIcons();
 }
 
-function renderProjectCard(link, index) {
-  return `<article class="project-card tone-${escapeAttribute(link.tone || "teal")}" tabindex="0" role="button" data-project-id="${escapeAttribute(link.id)}"><div class="project-cover" style="--cover: url('${escapeCssUrl(link.cover || fallbackCover(link.tone))}')"><span class="project-mark">${escapeHtml(link.mark || String(index + 1).padStart(2, "0"))}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="project-card-body"><div class="project-card-meta"><span>${escapeHtml(link.category)}</span><span>${escapeHtml(link.note || "项目教程")}</span></div><h4>${escapeHtml(link.title)} <i data-lucide="arrow-up-right" aria-hidden="true"></i></h4><p>${escapeHtml(link.description)}</p><div class="project-card-footer"><span>查看完整步骤</span><i data-lucide="chevron-right" aria-hidden="true"></i></div></div></article>`;
+function renderProjectSection(category, projects, index) {
+  const sectionId = `category-${category.id}`;
+  return `<section class="link-section" id="${escapeAttribute(sectionId)}" aria-labelledby="${escapeAttribute(sectionId)}-title"><div class="section-heading"><div class="section-heading-copy"><p class="section-index">${String(index + 1).padStart(2, "0")}</p><div><h2 id="${escapeAttribute(sectionId)}-title">${escapeHtml(category.name)}</h2><p>${escapeHtml(category.description || "选择项目，查看完整的使用教程")}</p></div></div><span class="section-count">${projects.length} 篇教程</span></div><div class="link-grid">${projects.length ? projects.map((link, cardIndex) => renderProjectCard(link, cardIndex)).join("") : '<p class="load-state">这个分类暂时还没有项目教程。</p>'}</div></section>`;
 }
 
-function openDialog(id) {
+function renderProjectCard(link, index) {
+  const tone = link.tone || toneForIndex(index);
+  return `<article class="project-card link-card tone-${escapeAttribute(tone)}" tabindex="0" role="button" aria-haspopup="dialog" aria-controls="project-dialog" data-project-id="${escapeAttribute(link.id)}" aria-label="查看${escapeAttribute(link.title)}教程"><div class="card-topline"><span class="status-badge">${escapeHtml(link.status || "教程")}</span><span class="card-number" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span></div><div class="card-identity"><span class="link-mark" aria-hidden="true">${escapeHtml(link.mark || "指")}</span><h3><span class="card-title-text">${escapeHtml(link.title)}</span><i data-lucide="arrow-up-right" aria-hidden="true"></i></h3></div><p class="card-description">${escapeHtml(link.description || "打开查看项目介绍和操作步骤。")}</p><div class="card-meta"><span>${escapeHtml(link.note || "项目教程")}</span><span>查看完整步骤</span></div></article>`;
+}
+
+function openDialog(id, trigger = null) {
   const link = navigationData.links.find((item) => item.id === id); if (!link) return;
-  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-hero tone-${escapeAttribute(link.tone || "teal")}" style="--cover: url('${escapeCssUrl(link.cover || fallbackCover(link.tone))}')"><span class="project-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-copy"><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(link.description)}</p><div class="steps-heading"><span>操作路径</span><span>${link.steps.length} 步</span></div><ol class="tutorial-steps">${link.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}<a class="dialog-cta" href="${escapeAttribute(normalizeUrl(link.url))}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a></div>`;
-  document.querySelector("#project-dialog").showModal();
+  lastTrigger = trigger || document.activeElement;
+  const cover = escapeAttribute(escapeCssUrl(link.cover || fallbackCover(link.tone)));
+  const steps = link.steps.map((step) => {
+    const title = escapeHtml(step.title || "");
+    const content = escapeHtml(step.content || "");
+    const image = safeImageUrl(step.image);
+    const text = `${title ? `<strong class="tutorial-step-title">${title}</strong>` : ""}${content ? `<span>${content}</span>` : ""}`;
+    return `<li><div class="tutorial-step-content">${text}${image ? `<img class="tutorial-step-image" src="${escapeAttribute(image)}" alt="${escapeAttribute(step.title || `${link.title}步骤图片`)}" loading="lazy" />` : ""}</div></li>`;
+  }).join("");
+  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-hero tone-${escapeAttribute(link.tone || "teal")}" style="--cover: url('${cover}')"><span class="project-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-copy"><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(link.description)}</p><div class="steps-heading"><span>操作路径</span><span>${link.steps.length} 步</span></div><ol class="tutorial-steps">${steps || '<li><div class="tutorial-step-content"><span>暂无详细步骤，请打开项目入口查看最新说明。</span></div></li>'}</ol>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}<a class="dialog-cta" href="${escapeAttribute(normalizeUrl(link.url))}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a></div>`;
+  const dialog = document.querySelector("#project-dialog");
+  dialog.showModal();
+  document.querySelector("#close-dialog")?.focus();
   document.querySelector("[data-track-id]")?.addEventListener("click", () => trackClick(link, "link_click"));
   trackClick(link, "project_view"); refreshIcons();
 }
 
-function closeDialog() { const dialog = document.querySelector("#project-dialog"); if (dialog?.open) dialog.close(); }
+function closeDialog() {
+  const dialog = document.querySelector("#project-dialog");
+  if (!dialog?.open) return;
+  dialog.close();
+  if (lastTrigger && document.contains(lastTrigger)) lastTrigger.focus();
+  lastTrigger = null;
+}
+
+function matchesSearch(link) {
+  const stepText = (link.steps || []).map((step) => [step.title, step.content, step.image].join(" ")).join(" ");
+  return [link.title, link.description, link.note, link.category, link.status, link.tips, stepText]
+    .some((value) => String(value || "").toLowerCase().includes(searchTerm));
+}
+
+function safeImageUrl(value) {
+  const trimmed = String(value || "").trim();
+  if (/^https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed) || (trimmed.startsWith("/") && !trimmed.startsWith("//"))) return trimmed;
+  return "";
+}
 function trackClick(link, event = "link_click") {
   const category = navigationData.categories.find((item) => item.name === link.category);
   sendTrackingEvent({ projectId: link.id, categoryId: category?.id || link.category, eventType: event });
@@ -143,3 +201,7 @@ function initializeTheme() { applyTheme(readStoredTheme() === "dark" ? "dark" : 
 function readStoredTheme() { try { return localStorage.getItem(THEME_STORAGE_KEY); } catch { return null; } }
 function applyTheme(theme, persist = true) { const normalized = theme === "dark" ? "dark" : "light"; document.documentElement.dataset.theme = normalized; if (persist) try { localStorage.setItem(THEME_STORAGE_KEY, normalized); } catch {} const button = document.querySelector("#theme-toggle"); if (button) { button.innerHTML = `<i data-lucide="${normalized === "dark" ? "sun" : "moon"}" aria-hidden="true"></i>`; button.title = normalized === "dark" ? "切换浅色模式" : "切换深色模式"; button.setAttribute("aria-label", button.title); refreshIcons(); } }
 function refreshIcons() { if (window.lucide?.createIcons) window.lucide.createIcons({ attrs: { "stroke-width": 1.8 } }); }
+
+function toneForIndex(index) {
+  return ["teal", "rose", "blue", "purple", "yellow", "orange", "lime"][index % 7];
+}

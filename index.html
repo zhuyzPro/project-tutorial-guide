@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="指南所：按生活场景整理的项目使用教程与实操步骤。" />
-    <title>指南所 · 项目教程索引</title>
+    <meta name="description" content="按生活场景整理的项目介绍、图文步骤与使用教程。" />
+    <meta name="theme-color" content="#f5f8fc" />
+    <title>指南所 · 项目教程导航</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <script>
       window.NAVIGUIDE_API_BASE = window.NAVIGUIDE_API_BASE || "/api";
@@ -18,27 +19,42 @@
     <a class="skip-link" href="#main">跳到主要内容</a>
     <div class="site-shell">
       <header class="site-header">
-        <a class="brand" href="./" aria-label="指南所首页">
-          <span class="brand-mark" aria-hidden="true"><i data-lucide="notebook-pen"></i></span>
-          <span class="brand-copy"><strong>指南所</strong><small>FIELD GUIDE / PROJECT TUTORIALS</small></span>
-        </a>
-        <nav class="top-nav" aria-label="主导航">
-          <a class="top-nav-link active" href="#projects">项目索引</a>
-          <a class="top-nav-link" href="#about">使用说明</a>
-          <button id="theme-toggle" class="icon-button" type="button" title="切换深色模式" aria-label="切换深色模式"><i data-lucide="moon" aria-hidden="true"></i></button>
-        </nav>
+        <div class="brand-cluster">
+          <span class="site-status" role="status"><span class="status-dot" aria-hidden="true"></span>持续更新</span>
+          <a class="brand" href="./" aria-label="指南所首页">
+            <span class="brand-text"><strong>指南所</strong><small>PROJECT TUTORIALS</small></span>
+          </a>
+        </div>
       </header>
 
-      <main id="main">
-        <section id="projects" class="directory" aria-labelledby="directory-title">
-          <div class="directory-toolbar"><div><p class="section-kicker">项目教程索引</p><h1 id="directory-title" class="directory-title">按场景找到项目</h1></div><div class="toolbar-tools"><label class="search-box"><i data-lucide="search" aria-hidden="true"></i><span class="sr-only">搜索项目</span><input id="search-input" type="search" placeholder="搜索项目、关键词" autocomplete="off" /></label><button id="clear-filter" class="text-button" type="button" hidden>清除筛选</button></div></div>
-          <div class="category-layout"><aside class="category-index" aria-label="项目分类"><div class="category-index-head"><span>分类索引</span><span id="category-total-label">--</span></div><div id="category-list" class="category-list"></div><div class="category-hint"><i data-lucide="mouse-pointer-2" aria-hidden="true"></i><span>选择分类，右侧只显示相关教程。</span></div></aside><section class="project-results" aria-live="polite"><div class="results-heading"><div><span id="active-category-label" class="results-kicker">全部项目</span><h3 id="results-title">最新整理</h3></div><span id="results-count" class="results-count">-- 篇指南</span></div><div id="project-grid" class="project-grid"><p class="load-state" role="status">正在整理项目索引...</p></div></section></div>
+      <main id="main" tabindex="-1">
+        <section class="intro" aria-labelledby="page-title">
+          <p class="eyebrow">PROJECT TUTORIALS</p>
+          <h1 id="page-title"><span class="headline-gradient">项目教程，<br /><em>分步抵达。</em></span></h1>
+          <p class="intro-copy">把项目入口、准备条件和操作步骤整理在一起，按生活场景找到适合你的教程。</p>
         </section>
 
-        <section id="about" class="about-band" aria-labelledby="about-title"><div class="about-label"><span class="section-kicker">02 / HOW TO READ</span><span class="about-line" aria-hidden="true"></span></div><div class="about-copy"><h2 id="about-title">先看路径，再动手。</h2><p>每篇教程都把准备材料、关键步骤和容易踩坑的地方放在同一页。入口状态会随时更新，具体规则以项目页面为准。</p></div><div class="about-points"><div><span>01</span><strong>选分类</strong><small>按生活场景定位</small></div><div><span>02</span><strong>看教程</strong><small>打开项目的完整步骤</small></div><div><span>03</span><strong>去入口</strong><small>准备好再开始操作</small></div></div></section>
+        <section id="projects" class="directory" aria-labelledby="directory-title">
+          <div class="directory-toolbar">
+            <div>
+              <p class="eyebrow directory-kicker">PROJECT INDEX</p>
+              <h2 id="directory-title" class="directory-title">按场景找到项目</h2>
+            </div>
+            <div class="toolbar-tools">
+              <label class="search-box"><i data-lucide="search" aria-hidden="true"></i><span class="sr-only">搜索项目</span><input id="search-input" type="search" placeholder="搜索项目、关键词" autocomplete="off" /></label>
+              <button id="clear-filter" class="text-button" type="button" hidden>清除筛选</button>
+            </div>
+          </div>
+          <div class="directory-summary"><span>按分类浏览项目教程</span><span id="category-total-label">--</span></div>
+          <nav id="category-list" class="section-nav" aria-label="项目分类"></nav>
+          <div id="project-grid" class="sections" aria-live="polite"><p class="load-state" role="status">正在整理项目索引...</p></div>
+        </section>
       </main>
-      <footer class="site-footer"><span>指南所 / FIELD GUIDE</span><span>内容仅作经验整理，项目规则以官方页面为准</span><span id="footer-year">2026</span></footer>
+
+      <footer class="site-footer"><span>指南所 / PROJECT TUTORIALS</span><span>内容仅作经验整理，项目规则以官方页面为准</span><span id="footer-year">2026</span></footer>
     </div>
+
+    <button id="theme-toggle" class="theme-toggle" type="button" title="切换深色模式" aria-label="切换深色模式"><i data-lucide="moon" aria-hidden="true"></i></button>
 
     <dialog id="project-dialog" class="project-dialog" aria-labelledby="dialog-title"><div class="dialog-frame"><button id="close-dialog" class="dialog-close" type="button" title="关闭教程" aria-label="关闭教程"><i data-lucide="x" aria-hidden="true"></i></button><div id="dialog-content"></div></div></dialog>
   </body>
