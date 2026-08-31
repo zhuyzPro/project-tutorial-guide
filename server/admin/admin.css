@@ -244,9 +244,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .admin-shell {
   position: relative;
-  width: min(1344px, calc(100% - 48px));
+  width: min(1344px, calc(100% - 376px));
   min-height: 100vh;
-  margin: 0 auto;
+  margin: 0 24px 0 352px;
   padding: 36px 0 64px;
 }
 
@@ -550,9 +550,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .load-error { margin-bottom: 15px; padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--coral) 35%, var(--line)); border-left: 4px solid var(--coral); border-radius: 4px; background: var(--coral-soft); color: var(--ink); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 
-/* The menu sits in the left margin on wide screens. Once that margin is no
-   longer wide enough, keep it in the document flow above the workspace. */
-@media (max-width: 1855px) {
+/* The menu stays in the left margin on desktop. At smaller widths it joins
+   the document flow so the workspace remains usable. */
+@media (max-width: 1100px) {
+  .admin-shell { width: calc(100% - 48px); margin: 0 auto; }
   .sidebar {
     position: static;
     display: flex;
@@ -585,7 +586,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .login-copy h1 { font-size: 39px; }
   .login-footnote { display: none; }
   .login-panel { min-height: auto; padding: 34px 24px 42px; }
-  .admin-shell { display: block; width: calc(100% - 32px); padding: 17px 0 36px; }
+  .admin-shell { display: block; width: calc(100% - 32px); margin: 0 auto; padding: 17px 0 36px; }
   .sidebar { position: static; height: auto; align-items: stretch; flex-direction: column; gap: 10px; padding: 14px 0 10px; overflow: visible; border-bottom: 0; }
   .sidebar-nav { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 5px; padding-bottom: 4px; }
   .nav-button { min-width: max-content; min-height: 36px; padding: 7px 9px; }
