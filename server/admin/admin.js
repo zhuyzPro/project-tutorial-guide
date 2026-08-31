@@ -10,6 +10,7 @@ const TONES = [
   ["purple", "紫色"],
   ["coral", "珊瑚"],
 ];
+const DATA_VIEWS = new Set(["dashboard", "analytics-trend", "analytics-sources", "analytics-projects"]);
 
 const state = {
   session: null,
@@ -18,6 +19,8 @@ const state = {
   stats: emptyStats(),
   statsFrom: dateInputValue(daysAgo(6)),
   statsTo: dateInputValue(new Date()),
+  statsPreset: "7d",
+  statsGranularity: "hour",
   activeView: "dashboard",
   projectSearch: "",
   projectCategory: "all",
@@ -108,7 +111,7 @@ async function loadNavigation() {
 }
 
 async function loadStats() {
-  const query = new URLSearchParams({ from: state.statsFrom, to: state.statsTo, granularity: "hour" });
+  const query = new URLSearchParams({ from: state.statsFrom, to: state.statsTo, granularity: state.statsGranularity });
   const payload = await api(`/admin/stats?${query.toString()}`);
   state.stats = normalizeStats(payload);
 }
@@ -151,11 +154,21 @@ function renderLogin() {
 
 function renderShell() {
   const content = state.loading ? renderLoading() : renderPage();
+  const dataSectionActive = DATA_VIEWS.has(state.activeView);
   return `<div class="admin-shell">
     <aside class="sidebar" aria-label="后台导航">
-      <span class="sidebar-eyebrow">内容菜单</span>
+      <span class="sidebar-eyebrow">数据中心</span>
       <nav class="sidebar-nav">
-        ${renderNavButton("dashboard", "route", "访问概览", "")}
+        <div class="nav-group">
+          ${renderNavButton("dashboard", "layout-dashboard", "数据概览", "", { parent: true, active: dataSectionActive })}
+          <div class="nav-subnav" aria-label="数据概览子菜单">
+            ${renderNavButton("dashboard", "chart-column", "总览", "", { sub: true })}
+            ${renderNavButton("analytics-trend", "activity", "访问趋势", "", { sub: true })}
+            ${renderNavButton("analytics-sources", "globe-2", "访问来源", "", { sub: true })}
+            ${renderNavButton("analytics-projects", "mouse-pointer-click", "项目点击", "", { sub: true })}
+          </div>
+        </div>
+        <span class="sidebar-eyebrow sidebar-eyebrow--content">内容管理</span>
         ${renderNavButton("projects", "folder-plus", "项目教程", state.links.length)}
         ${renderNavButton("categories", "settings-2", "分类管理", state.categories.length)}
       </nav>
@@ -176,8 +189,12 @@ function renderShell() {
   </div>${renderModal()}`;
 }
 
-function renderNavButton(view, icon, label, count) {
-  return `<button class="nav-button ${state.activeView === view ? "active" : ""}" type="button" data-action="navigate" data-view="${view}"><i data-lucide="${icon}" aria-hidden="true"></i><span class="nav-label">${label}</span>${count !== "" ? `<span class="nav-count">${formatNumber(count)}</span>` : ""}</button>`;
+function renderNavButton(view, icon, label, count, options = {}) {
+  const active = options.active ?? (state.activeView === view);
+  const classes = ["nav-button", active ? "active" : "", options.parent ? "nav-parent" : "", options.sub ? "nav-button-sub" : ""].filter(Boolean).join(" ");
+  const current = active && !options.parent ? ` aria-current="page"` : "";
+  const chevron = options.parent ? `<i class="nav-chevron" data-lucide="chevron-down" aria-hidden="true"></i>` : "";
+  return `<button class="${classes}" type="button" data-action="navigate" data-view="${view}"${current}><i data-lucide="${icon}" aria-hidden="true"></i><span class="nav-label">${label}</span>${count !== "" ? `<span class="nav-count">${formatNumber(count)}</span>` : ""}${chevron}</button>`;
 }
 
 function renderLoading() {
@@ -187,52 +204,147 @@ function renderLoading() {
 function renderPage() {
   if (state.activeView === "projects") return renderProjects();
   if (state.activeView === "categories") return renderCategories();
+  if (state.activeView === "analytics-trend") return renderAnalyticsTrend();
+  if (state.activeView === "analytics-sources") return renderAnalyticsSources();
+  if (state.activeView === "analytics-projects") return renderAnalyticsProjects();
   return renderDashboard();
 }
 
 function renderDashboard() {
   const overview = state.stats.overview;
-  const rangeLabel = `${state.statsFrom} 至 ${state.statsTo}`;
+  const rangeLabel = statsRangeLabel();
   const categoryRows = state.stats.categories.slice(0, 6);
   const projectRows = state.stats.projects.slice(0, 6);
-  const recentRows = state.stats.recent.slice(0, 8);
-  return `${renderPageHeading("访问概览", "按时间段查看分类、项目和访问来源的点击情况。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><span>刷新数据</span></button>`)}
+  const sourceRows = state.stats.recent.slice(0, 5);
+  return `${renderPageHeading("数据概览", "先看整体访问，再进入趋势、来源或项目点击明细。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
     ${renderContentError()}
-    <section class="metric-grid" aria-label="统计摘要">
-      ${renderMetric("pine", "访问事件", overview.events, `统计区间：${rangeLabel}`)}
-      ${renderMetric("blue", "分类浏览", overview.categoryViews, "访客选择分类次数")}
-      ${renderMetric("amber", "项目点击", overview.linkClicks, "项目教程入口与查看")}
-      ${renderMetric("coral", "独立 IP", overview.uniqueVisitors, "按 IP 去重的访问来源")}
-    </section>
+    ${renderStatsToolbar()}
+    ${renderMetricGrid([
+      ["pine", "独立访客（按 IP）", overview.uniqueVisitors, "按 IP 去重，不等同于真实用户数"],
+      ["blue", "访问次数", overview.events, `统计区间：${rangeLabel}`],
+      ["amber", "项目点击次数", overview.linkClicks, "教程入口被点击的次数"],
+      ["coral", "分类浏览次数", overview.categoryViews, "访客选择分类的次数"],
+    ])}
     <section class="dashboard-grid">
       <article class="panel span-two">
         <div class="panel-header">
-          <div><h2 class="panel-title">访问时段</h2><p class="panel-caption">按小时汇总的访问事件，柱高表示事件数量。</p></div>
-          <form class="range-control" data-form="stats-filter">
-            <label class="range-field"><span>开始日期</span><input class="date-input" name="from" type="date" value="${escapeAttribute(state.statsFrom)}" required /></label>
-            <label class="range-field"><span>结束日期</span><input class="date-input" name="to" type="date" value="${escapeAttribute(state.statsTo)}" required /></label>
-            <button class="secondary-button" type="submit">更新</button>
-          </form>
+          <div><h2 class="panel-title">访问趋势</h2><p class="panel-caption">${state.statsGranularity === "day" ? "按天" : "按小时"}汇总访问次数。</p></div>
+          <button class="quiet-button panel-link" type="button" data-action="navigate" data-view="analytics-trend">查看趋势明细 <i data-lucide="arrow-up-right" aria-hidden="true"></i></button>
         </div>
         <div class="panel-body">${renderTimeline(state.stats.hourly, rangeLabel, state.stats.error)}</div>
       </article>
       <article class="panel">
-        <div class="panel-header"><div><h2 class="panel-title">热门分类</h2><p class="panel-caption">分类浏览与项目点击</p></div></div>
+        <div class="panel-header"><div><h2 class="panel-title">热门分类</h2><p class="panel-caption">分类浏览与项目点击</p></div><span class="panel-summary">${formatNumber(categoryRows.length)} 项</span></div>
         <div class="panel-body">${renderCategoryStats(categoryRows)}</div>
       </article>
       <article class="panel">
-        <div class="panel-header"><div><h2 class="panel-title">热门项目</h2><p class="panel-caption">访问者最常点击的教程</p></div></div>
+        <div class="panel-header"><div><h2 class="panel-title">热门项目</h2><p class="panel-caption">访问者最常点击的教程</p></div><button class="quiet-button panel-link" type="button" data-action="navigate" data-view="analytics-projects">全部 <i data-lucide="arrow-up-right" aria-hidden="true"></i></button></div>
         <div class="panel-body">${renderProjectStats(projectRows)}</div>
       </article>
       <article class="panel span-two">
-        <div class="panel-header"><div><h2 class="panel-title">访问来源</h2><p class="panel-caption">按 IP 汇总，显示最近一次访问时间。</p></div></div>
-        <div class="panel-body">${renderRecentStats(recentRows)}</div>
+        <div class="panel-header"><div><h2 class="panel-title">访问来源</h2><p class="panel-caption">已按脱敏 IP 汇总，次数代表该来源在区间内的访问次数。</p></div><div class="panel-header-actions"><span class="panel-summary">共 ${formatNumber(state.stats.sourceCount)} 个来源</span><button class="quiet-button panel-link" type="button" data-action="navigate" data-view="analytics-sources">查看全部 <i data-lucide="arrow-up-right" aria-hidden="true"></i></button></div></div>
+        <div class="panel-body">${renderSourceSummary(sourceRows)}</div>
       </article>
     </section>`;
 }
 
+function renderAnalyticsTrend() {
+  const overview = state.stats.overview;
+  const rangeLabel = statsRangeLabel();
+  return `${renderPageHeading("访问趋势", "按时间粒度观察前台访问次数变化，定位高峰和低谷。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
+    ${renderContentError()}
+    ${renderStatsToolbar()}
+    ${renderMetricGrid([
+      ["pine", "访问次数", overview.events, `统计区间：${rangeLabel}`],
+      ["blue", "独立访客（按 IP）", overview.uniqueVisitors, "按 IP 去重，不等同于真实用户数"],
+      ["amber", "分类浏览次数", overview.categoryViews, "进入分类页的次数"],
+      ["coral", "项目点击次数", overview.linkClicks, "教程入口点击次数"],
+    ])}
+    <section class="dashboard-grid analytics-grid">
+      <article class="panel span-two">
+        <div class="panel-header"><div><h2 class="panel-title">访问次数趋势</h2><p class="panel-caption">柱高表示${state.statsGranularity === "day" ? "当天" : "该小时"}的访问次数。</p></div><span class="panel-summary">${escapeHtml(rangeLabel)}</span></div>
+        <div class="panel-body">${renderTimeline(state.stats.hourly, rangeLabel, state.stats.error)}</div>
+      </article>
+      <article class="panel">
+        <div class="panel-header"><div><h2 class="panel-title">分类访问结构</h2><p class="panel-caption">按分类浏览次数排序</p></div></div>
+        <div class="panel-body">${renderCategoryStats(state.stats.categories.slice(0, 8))}</div>
+      </article>
+      <article class="panel">
+        <div class="panel-header"><div><h2 class="panel-title">项目点击结构</h2><p class="panel-caption">按教程点击次数排序</p></div></div>
+        <div class="panel-body">${renderProjectStats(state.stats.projects.slice(0, 8))}</div>
+      </article>
+    </section>`;
+}
+
+function renderAnalyticsSources() {
+  const overview = state.stats.overview;
+  const rows = state.stats.recent;
+  const sourceCount = Number(state.stats.sourceCount ?? rows.length) || 0;
+  const average = sourceCount ? overview.events / sourceCount : 0;
+  const latest = rows.reduce((current, row) => {
+    const candidate = row.lastSeenAt || row.createdAt || row.timestamp || row.time || "";
+    if (!candidate) return current;
+    if (!current) return candidate;
+    return new Date(candidate).getTime() > new Date(current).getTime() ? candidate : current;
+  }, "") || "--";
+  const sourceDisplayNote = sourceCount > rows.length ? `当前展示访问次数最高的 ${formatNumber(rows.length)} 个来源` : "访问次数按当前筛选区间汇总";
+  return `${renderPageHeading("访问来源", "查看已脱敏的访客 IP、访问次数与活跃时间，便于识别来源质量。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
+    ${renderContentError()}
+    ${renderStatsToolbar()}
+    ${renderMetricGrid([
+      ["pine", "脱敏来源数", sourceCount, "当前区间内的 IP 来源"],
+      ["blue", "访问次数", overview.events, "所有来源合计"],
+      ["amber", "平均每来源", formatDecimal(average), "访问次数 ÷ 脱敏来源数"],
+      ["coral", "最近活跃", formatDateTime(latest), "来源列表中的最新访问"],
+    ])}
+    <article class="panel sources-panel">
+      <div class="panel-header"><div><h2 class="panel-title">IP 来源明细</h2><p class="panel-caption">IP 已脱敏展示；${escapeHtml(sourceDisplayNote)}。</p></div><span class="panel-summary">共 ${formatNumber(sourceCount)} 个来源</span></div>
+      <div class="panel-body">${renderRecentStats(rows)}</div>
+    </article>`;
+}
+
+function renderAnalyticsProjects() {
+  const overview = state.stats.overview;
+  const rows = state.stats.projects;
+  const top = rows[0];
+  const topTitle = top?.linkTitle || top?.title || "--";
+  const average = rows.length ? overview.linkClicks / rows.length : 0;
+  return `${renderPageHeading("项目点击", "按项目查看教程入口点击次数，帮助你判断哪些内容最值得持续维护。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
+    ${renderContentError()}
+    ${renderStatsToolbar()}
+    ${renderMetricGrid([
+      ["pine", "项目点击次数", overview.linkClicks, "当前区间内的教程点击"],
+      ["blue", "有点击项目", rows.length, "至少产生 1 次点击的项目"],
+      ["amber", "平均每项目", formatDecimal(average), "点击次数 ÷ 有点击项目"],
+      ["coral", "最高点击项目", top ? formatNumber(statValue(top, ["clicks", "linkClicks", "count"])) : "0", topTitle],
+    ])}
+    <article class="panel project-stats-panel">
+      <div class="panel-header"><div><h2 class="panel-title">项目点击明细</h2><p class="panel-caption">按点击次数从高到低排列。</p></div><span class="panel-summary">共 ${formatNumber(rows.length)} 个项目</span></div>
+      <div class="panel-body">${renderProjectRanking(rows)}</div>
+    </article>`;
+}
+
+function renderMetricGrid(items) {
+  return `<section class="metric-grid" aria-label="统计摘要">${items.map(([tone, label, value, note]) => renderMetric(tone, label, value, note)).join("")}</section>`;
+}
+
+function renderStatsToolbar() {
+  const presets = [["today", "今天"], ["7d", "近 7 天"], ["30d", "近 30 天"], ["90d", "近 90 天"]];
+  const granularity = state.statsGranularity === "day" ? "day" : "hour";
+  return `<section class="stats-toolbar" aria-label="统计筛选">
+    <div class="range-presets" role="group" aria-label="常用时间范围">${presets.map(([value, label]) => `<button class="range-preset ${state.statsPreset === value ? "active" : ""}" type="button" data-action="set-stats-range" data-range="${value}">${label}</button>`).join("")}<span class="range-current">${escapeHtml(statsRangeLabel())}</span></div>
+    <form class="range-control" data-form="stats-filter">
+      <label class="range-field"><span>开始日期</span><input class="date-input" name="from" type="date" value="${escapeAttribute(state.statsFrom)}" required /></label>
+      <label class="range-field"><span>结束日期</span><input class="date-input" name="to" type="date" value="${escapeAttribute(state.statsTo)}" required /></label>
+      <label class="range-field"><span>统计粒度</span><select class="date-input granularity-select" name="granularity"><option value="hour" ${granularity === "hour" ? "selected" : ""}>按小时</option><option value="day" ${granularity === "day" ? "selected" : ""}>按天</option></select></label>
+      <button class="secondary-button" type="submit"><i data-lucide="filter" aria-hidden="true"></i><span>应用筛选</span></button>
+    </form>
+  </section>`;
+}
+
 function renderMetric(tone, label, value, note) {
-  return `<article class="metric ${tone}"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${formatNumber(value)}</strong><span class="metric-note">${escapeHtml(note)}</span></article>`;
+  const textValue = typeof value === "string" && value.trim() && !/^-?\d+(?:\.\d+)?$/.test(value.trim());
+  return `<article class="metric ${tone}"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value ${textValue ? "metric-value-text" : ""}">${formatMetricValue(value)}</strong><span class="metric-note">${escapeHtml(note)}</span></article>`;
 }
 
 function renderTimeline(points, rangeLabel, error) {
@@ -242,18 +354,18 @@ function renderTimeline(points, rangeLabel, error) {
   const max = Math.max(1, ...visible.map((item) => statValue(item, ["events", "count", "value"])));
   const bars = visible.map((item) => {
     const events = statValue(item, ["events", "count", "value"]);
-    const label = `${formatTimelineTime(item.timestamp || item.time || item.hour || "")} · ${formatNumber(events)} 次`;
+    const label = `${formatTimelineTime(item.timestamp || item.time || item.hour || "", state.statsGranularity)} · ${formatNumber(events)} 次`;
     const height = Math.max(4, Math.round((events / max) * 100));
     return `<span class="timeline-bar" style="--height:${height}%" data-label="${escapeAttribute(label)}" aria-label="${escapeAttribute(label)}"></span>`;
   }).join("");
-  const first = formatTimelineTime(visible[0]?.timestamp || visible[0]?.time || visible[0]?.hour || "");
-  const last = formatTimelineTime(visible.at(-1)?.timestamp || visible.at(-1)?.time || visible.at(-1)?.hour || "");
+  const first = formatTimelineTime(visible[0]?.timestamp || visible[0]?.time || visible[0]?.hour || "", state.statsGranularity);
+  const last = formatTimelineTime(visible.at(-1)?.timestamp || visible.at(-1)?.time || visible.at(-1)?.hour || "", state.statsGranularity);
   return `<div class="timeline" style="--columns:${visible.length}" role="img" aria-label="${escapeAttribute(`${rangeLabel} 的访问趋势`)}">${bars}</div><div class="timeline-labels"><span>${escapeHtml(first)}</span><span>${escapeHtml(last)}</span></div>`;
 }
 
 function renderCategoryStats(rows) {
   if (!rows.length) return renderEmptyTable("当前时段还没有分类浏览记录");
-  return `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>分类</th><th class="numeric">浏览</th><th class="numeric">点击</th></tr></thead><tbody>${rows.map((row) => {
+  return `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>分类</th><th class="numeric">浏览次数</th><th class="numeric">点击次数</th></tr></thead><tbody>${rows.map((row) => {
     const name = row.categoryName || row.name || row.title || "未分类";
     return `<tr><td><span class="table-main">${escapeHtml(name)}</span></td><td class="numeric">${formatNumber(statValue(row, ["categoryViews", "views", "viewCount"]))}</td><td class="numeric">${formatNumber(statValue(row, ["linkClicks", "clicks", "clickCount"]))}</td></tr>`;
   }).join("")}</tbody></table></div>`;
@@ -261,20 +373,43 @@ function renderCategoryStats(rows) {
 
 function renderProjectStats(rows) {
   if (!rows.length) return renderEmptyTable("当前时段还没有项目点击记录");
-  return `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>项目</th><th class="numeric">点击</th></tr></thead><tbody>${rows.map((row) => {
+  return `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>项目</th><th class="numeric">点击次数</th></tr></thead><tbody>${rows.map((row) => {
     const title = row.linkTitle || row.title || row.name || "未命名项目";
     const category = row.categoryName || row.category || "";
     return `<tr><td><span class="table-main">${escapeHtml(title)}</span><span class="table-sub">${escapeHtml(category)}</span></td><td class="numeric">${formatNumber(statValue(row, ["clicks", "linkClicks", "count"]))}</td></tr>`;
   }).join("")}</tbody></table></div>`;
 }
 
+function renderSourceSummary(rows) {
+  if (!rows.length) return renderEmptyTable("当前时段还没有可展示的访问来源");
+  return `<div class="source-summary">${rows.map((row, index) => {
+    const source = row.source || row.ip || row.ipSource || row.address || "未记录";
+    const events = statValue(row, ["events", "count", "visits"]);
+    const time = row.lastSeenAt || row.createdAt || row.timestamp || row.time || "--";
+    return `<div class="source-summary-row"><span class="source-rank">${String(index + 1).padStart(2, "0")}</span><div class="source-summary-main"><strong>${escapeHtml(source)}</strong><span>${escapeHtml(formatDateTime(time))}</span></div><strong class="source-events">${formatNumber(events)} <small>次</small></strong></div>`;
+  }).join("")}</div>`;
+}
+
 function renderRecentStats(rows) {
   if (!rows.length) return renderEmptyTable("当前时段还没有可展示的访问来源");
-  return `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>IP 来源</th><th>最近访问</th><th class="numeric">事件</th></tr></thead><tbody>${rows.map((row) => {
-    const source = row.ip || row.ipSource || row.source || row.address || "未记录";
-    const time = row.lastSeenAt || row.createdAt || row.timestamp || row.time || "--";
-    const events = statValue(row, ["events", "count", "visits"]) || 1;
-    return `<tr><td><span class="table-main">${escapeHtml(source)}</span></td><td><span class="table-sub">${escapeHtml(formatDateTime(time))}</span></td><td class="numeric">${formatNumber(events)}</td></tr>`;
+  return `<div class="data-table-wrap"><table class="data-table source-table"><thead><tr><th>IP 来源（已脱敏）</th><th class="numeric">访问次数</th><th>首次访问</th><th>最近访问</th></tr></thead><tbody>${rows.map((row) => {
+    const source = row.source || row.ip || row.ipSource || row.address || "未记录";
+    const firstSeen = row.firstSeenAt || row.createdAt || row.timestamp || row.time || "--";
+    const lastSeen = row.lastSeenAt || row.createdAt || row.timestamp || row.time || "--";
+    const events = statValue(row, ["events", "count", "visits"]);
+    return `<tr><td><span class="table-main">${escapeHtml(source)}</span></td><td class="numeric source-events-cell">${formatNumber(events)}</td><td><span class="table-sub">${escapeHtml(formatDateTime(firstSeen))}</span></td><td><span class="table-sub">${escapeHtml(formatDateTime(lastSeen))}</span></td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+
+function renderProjectRanking(rows) {
+  if (!rows.length) return renderEmptyTable("当前时段还没有项目点击记录");
+  const total = rows.reduce((sum, row) => sum + statValue(row, ["clicks", "linkClicks", "count"]), 0);
+  return `<div class="data-table-wrap"><table class="data-table project-ranking-table"><thead><tr><th>#</th><th>项目</th><th>所属分类</th><th class="numeric">点击次数</th><th class="share-column">占比</th></tr></thead><tbody>${rows.map((row, index) => {
+    const title = row.linkTitle || row.title || row.name || "未命名项目";
+    const category = row.categoryName || row.category || "未分类";
+    const clicks = statValue(row, ["clicks", "linkClicks", "count"]);
+    const share = total ? (clicks / total) * 100 : 0;
+    return `<tr><td class="rank-cell">${String(index + 1).padStart(2, "0")}</td><td><span class="table-main">${escapeHtml(title)}</span></td><td><span class="table-sub">${escapeHtml(category)}</span></td><td class="numeric source-events-cell">${formatNumber(clicks)}</td><td class="share-cell"><span class="share-track"><span class="share-fill" style="--share:${Math.min(100, Math.max(0, share))}%"></span></span><span>${formatPercent(share)}</span></td></tr>`;
   }).join("")}</tbody></table></div>`;
 }
 
@@ -446,6 +581,7 @@ async function handleClick(event) {
       render();
       return;
     }
+    if (action === "set-stats-range") return updateStatsPreset(button.dataset.range || "7d");
     if (action === "toggle-theme") return toggleTheme();
     if (action === "logout") return logout();
     if (action === "refresh-workspace") return loadWorkspace();
@@ -556,7 +692,36 @@ async function updateStatsFilter(form) {
   if (!from || !to || from > to) throw new Error("请填写有效的开始和结束日期");
   state.statsFrom = from;
   state.statsTo = to;
+  state.statsPreset = "custom";
+  state.statsGranularity = String(data.get("granularity") || "hour") === "day" ? "day" : "hour";
   state.loading = true;
+  render();
+  try {
+    await loadStats();
+  } finally {
+    state.loading = false;
+    render();
+  }
+}
+
+async function updateStatsPreset(preset) {
+  const ranges = {
+    today: { days: 1, granularity: "hour" },
+    "7d": { days: 7, granularity: "hour" },
+    "30d": { days: 30, granularity: "day" },
+    "90d": { days: 90, granularity: "day" },
+  };
+  const selected = ranges[preset] || ranges["7d"];
+  const end = new Date();
+  const start = new Date(end);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - selected.days + 1);
+  state.statsFrom = dateInputValue(start);
+  state.statsTo = dateInputValue(end);
+  state.statsPreset = preset in ranges ? preset : "7d";
+  state.statsGranularity = selected.granularity;
+  state.loading = true;
+  state.contentError = "";
   render();
   try {
     await loadStats();
@@ -755,6 +920,8 @@ function nextMark() {
 
 function normalizeStats(payload) {
   const overview = payload?.overview || payload?.totals || payload?.summary || {};
+  const sourceRows = array(payload?.ipSources).length ? array(payload.ipSources) : array(payload?.recent || payload?.sources);
+  const fallbackSourceCount = new Set(sourceRows.map((row) => row.source || row.ipSource || row.ip || row.address || "未记录")).size;
   return {
     overview: {
       events: statValue(overview, ["events", "totalEvents", "total"]),
@@ -765,14 +932,15 @@ function normalizeStats(payload) {
     categories: array(payload?.categories || payload?.byCategory),
     projects: array(payload?.projects || payload?.byProject),
     hourly: array(payload?.hourly || payload?.timeline),
-    recent: array(payload?.ipSources).length ? array(payload.ipSources) : array(payload?.recent || payload?.sources),
+    recent: sourceRows,
+    sourceCount: Number.isFinite(Number(payload?.ipSourceCount)) ? Number(payload.ipSourceCount) : fallbackSourceCount,
     range: payload?.range || null,
     error: "",
   };
 }
 
 function emptyStats(error = "") {
-  return { overview: { events: 0, categoryViews: 0, linkClicks: 0, uniqueVisitors: 0 }, categories: [], projects: [], hourly: [], recent: [], range: null, error };
+  return { overview: { events: 0, categoryViews: 0, linkClicks: 0, uniqueVisitors: 0 }, categories: [], projects: [], hourly: [], recent: [], sourceCount: 0, range: null, error };
 }
 
 function sortByPosition(items) {
@@ -794,6 +962,21 @@ function statValue(item, keys) {
 
 function array(value) { return Array.isArray(value) ? value : []; }
 function formatNumber(value) { return new Intl.NumberFormat("zh-CN").format(Number(value) || 0); }
+function formatMetricValue(value) {
+  if (typeof value === "string" && value.trim() && !/^-?\d+(?:\.\d+)?$/.test(value.trim())) return escapeHtml(value);
+  return formatNumber(value);
+}
+function formatDecimal(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(number) : "0.0";
+}
+function formatPercent(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(number)}%` : "0%";
+}
+function statsRangeLabel() {
+  return `${state.statsFrom} 至 ${state.statsTo}`;
+}
 function dateInputValue(date) { const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 10); }
 function daysAgo(days) { return new Date(Date.now() - days * 86_400_000); }
 
@@ -803,10 +986,15 @@ function formatDateTime(value) {
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(time);
 }
 
-function formatTimelineTime(value) {
+function formatTimelineTime(value, granularity = "hour") {
   if (!value) return "--";
   const time = new Date(value);
-  if (!Number.isNaN(time.getTime())) return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", hour12: false }).format(time);
+  if (!Number.isNaN(time.getTime())) {
+    const options = granularity === "day"
+      ? { month: "numeric", day: "numeric" }
+      : { month: "numeric", day: "numeric", hour: "2-digit", hour12: false };
+    return new Intl.DateTimeFormat("zh-CN", options).format(time);
+  }
   return String(value).replace("T", " ").slice(5, 16);
 }
 

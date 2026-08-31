@@ -934,7 +934,7 @@ function handleAdminStats(req, res, searchParams) {
     const rawIpSources = db.prepare(`SELECT ip, COUNT(*) AS events,
       MIN(created_at) AS firstSeenAt, MAX(created_at) AS lastSeenAt
       FROM analytics_events WHERE ${where}
-      GROUP BY ip ORDER BY events DESC, lastSeenAt DESC LIMIT 100`).all(...params);
+      GROUP BY ip ORDER BY events DESC, lastSeenAt DESC`).all(...params);
     const ipSourceMap = new Map();
     rawIpSources.forEach((item) => {
       const source = maskIpAddress(item.ip);
@@ -944,7 +944,8 @@ function handleAdminStats(req, res, searchParams) {
       if (item.lastSeenAt > aggregate.lastSeenAt) aggregate.lastSeenAt = item.lastSeenAt;
       ipSourceMap.set(source, aggregate);
     });
-    const ipSources = [...ipSourceMap.values()].sort((left, right) => right.events - left.events || right.lastSeenAt.localeCompare(left.lastSeenAt));
+    const rankedIpSources = [...ipSourceMap.values()].sort((left, right) => right.events - left.events || right.lastSeenAt.localeCompare(left.lastSeenAt));
+    const ipSources = rankedIpSources.slice(0, 100);
     const recent = db.prepare(`SELECT event_type AS eventType, category_id AS categoryId, category_name AS categoryName,
       link_id AS linkId, link_title AS linkTitle, ip, created_at AS createdAt
       FROM analytics_events WHERE ${where} ORDER BY created_at_ms DESC LIMIT 50`).all(...params)
@@ -971,6 +972,7 @@ function handleAdminStats(req, res, searchParams) {
       byProject,
       timeline,
       ipSources,
+      ipSourceCount: rankedIpSources.length,
       recent,
     });
   } catch (error) {
