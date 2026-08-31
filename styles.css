@@ -429,6 +429,13 @@ h1 {
   transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
+button.section-nav-link {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
 .section-nav-link {
   border-color: color-mix(in srgb, var(--nav-tone) 32%, var(--line));
   background: color-mix(in srgb, var(--nav-tone) 8%, var(--surface));

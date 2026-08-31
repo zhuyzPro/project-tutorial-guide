@@ -1,5 +1,6 @@
 const API_BASE = String(window.NAVIGUIDE_API_BASE || "/api").replace(/\/$/, "");
 const THEME_STORAGE_KEY = "naviguide-theme";
+const ALL_CATEGORY_ID = "__all__";
 
 const FALLBACK_DATA = {
   categories: [
@@ -23,7 +24,7 @@ const FALLBACK_DATA = {
 };
 
 let navigationData = { categories: [], links: [] };
-let activeCategory = "all";
+let activeCategory = ALL_CATEGORY_ID;
 let searchTerm = "";
 let lastTrigger = null;
 
@@ -31,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeTheme();
   document.querySelector("#footer-year").textContent = String(new Date().getFullYear());
   document.querySelector("#search-input")?.addEventListener("input", (event) => { searchTerm = event.target.value.trim().toLowerCase(); renderCategoryList(); renderProjects(); });
-  document.querySelector("#clear-filter")?.addEventListener("click", () => { searchTerm = ""; activeCategory = "all"; document.querySelector("#search-input").value = ""; renderAll(); });
+  document.querySelector("#clear-filter")?.addEventListener("click", () => { searchTerm = ""; activeCategory = ALL_CATEGORY_ID; document.querySelector("#search-input").value = ""; renderAll(); });
   document.querySelector("#close-dialog")?.addEventListener("click", closeDialog);
   document.querySelector("#project-dialog")?.addEventListener("click", (event) => { if (event.target.id === "project-dialog") closeDialog(); });
   document.querySelector("#project-dialog")?.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(); });
@@ -48,6 +49,9 @@ async function loadNavigationData() {
   } catch (error) {
     console.info("Using local guide preview:", error.message);
     navigationData = normalizeData(FALLBACK_DATA);
+  }
+  if (activeCategory !== ALL_CATEGORY_ID && !navigationData.categories.some((category) => category.id === activeCategory)) {
+    activeCategory = ALL_CATEGORY_ID;
   }
   renderAll();
 }
@@ -83,31 +87,35 @@ function renderAll() {
 
 function renderCategoryList() {
   const list = document.querySelector("#category-list");
-  list.innerHTML = navigationData.categories.map((category, index) => {
+  const matchingLinks = searchTerm ? navigationData.links.filter(matchesSearch) : navigationData.links;
+  const allButton = `<button class="section-nav-link tone-purple ${activeCategory === ALL_CATEGORY_ID ? "active" : ""}" type="button" data-category="${ALL_CATEGORY_ID}" aria-pressed="${activeCategory === ALL_CATEGORY_ID}" style="--nav-tone: var(--purple);"><span class="nav-index">00</span><span>全部</span><small>${matchingLinks.length}</small></button>`;
+  const categoryButtons = navigationData.categories.map((category, index) => {
     const categoryLinks = navigationData.links.filter((link) => link.category === category.name);
     const matchingLinks = searchTerm ? categoryLinks.filter(matchesSearch) : categoryLinks;
-    if (searchTerm && !matchingLinks.length) return "";
     const count = matchingLinks.length;
     const tone = toneForIndex(index);
-    const current = activeCategory === category.id ? ' aria-current="location"' : "";
-    return `<a class="section-nav-link tone-${tone} ${activeCategory === category.id ? "active" : ""}" href="#category-${escapeAttribute(category.id)}" data-category="${escapeAttribute(category.id)}"${current} style="--nav-tone: var(--${tone});"><span class="nav-index">${String(index + 1).padStart(2, "0")}</span><span>${escapeHtml(category.name)}</span><small>${count}</small></a>`;
-  }).filter(Boolean).join("");
-  list.querySelectorAll("[data-category]").forEach((link) => link.addEventListener("click", () => {
-    activeCategory = link.dataset.category;
+    return `<button class="section-nav-link tone-${tone} ${activeCategory === category.id ? "active" : ""}" type="button" data-category="${escapeAttribute(category.id)}" aria-pressed="${activeCategory === category.id}" style="--nav-tone: var(--${tone});"><span class="nav-index">${String(index + 1).padStart(2, "0")}</span><span>${escapeHtml(category.name)}</span><small>${count}</small></button>`;
+  }).join("");
+  list.innerHTML = allButton + categoryButtons;
+  list.querySelectorAll("[data-category]").forEach((button) => button.addEventListener("click", () => {
+    const nextCategory = button.dataset.category;
+    if (nextCategory !== ALL_CATEGORY_ID && !navigationData.categories.some((category) => category.id === nextCategory)) return;
+    if (nextCategory === activeCategory) return;
+    activeCategory = nextCategory;
     const category = navigationData.categories.find((item) => item.id === activeCategory);
     if (category) trackCategory(category);
-    list.querySelectorAll("[data-category]").forEach((item) => {
-      const isActive = item === link;
-      item.classList.toggle("active", isActive);
-      if (isActive) item.setAttribute("aria-current", "location");
-      else item.removeAttribute("aria-current");
-    });
+    renderCategoryList();
+    renderProjects();
   }));
 }
 
 function renderProjects() {
   const grid = document.querySelector("#project-grid");
-  const sections = navigationData.categories.map((category, index) => {
+  const visibleCategories = activeCategory === ALL_CATEGORY_ID
+    ? navigationData.categories
+    : navigationData.categories.filter((category) => category.id === activeCategory);
+  const sections = visibleCategories.map((category) => {
+    const index = navigationData.categories.indexOf(category);
     let projects = navigationData.links.filter((link) => link.category === category.name);
     if (searchTerm) projects = projects.filter(matchesSearch);
     if (searchTerm && !projects.length) return "";
