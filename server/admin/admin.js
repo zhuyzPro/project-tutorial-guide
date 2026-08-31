@@ -150,11 +150,10 @@ function renderLogin() {
 }
 
 function renderShell() {
-  const viewTitle = { dashboard: "访问概览", projects: "项目教程", categories: "分类管理" }[state.activeView] || "后台";
   const content = state.loading ? renderLoading() : renderPage();
   return `<div class="admin-shell">
     <aside class="sidebar" aria-label="后台导航">
-      <div class="sidebar-brand"><span class="brand-stamp">指</span><span><strong>指南所后台</strong><small>内容编辑台</small></span></div>
+      <span class="sidebar-eyebrow">内容菜单</span>
       <nav class="sidebar-nav">
         ${renderNavButton("dashboard", "route", "访问概览", "")}
         ${renderNavButton("projects", "folder-plus", "项目教程", state.links.length)}
@@ -164,7 +163,7 @@ function renderShell() {
     </aside>
     <main id="workspace" class="workspace" tabindex="-1">
       <header class="topbar">
-        <div class="topbar-location"><span>指南所 / 内容工作台</span><strong>${escapeHtml(viewTitle)}</strong></div>
+        <div class="topbar-brand"><span class="brand-stamp">指</span><span><strong>指南所后台</strong><small>PROJECT TUTORIAL DESK</small></span></div>
         <div class="topbar-actions">
           <span class="account-name" title="${escapeAttribute(state.session.username || "管理员")}">${escapeHtml(state.session.username || "管理员")}</span>
           <button class="icon-button" type="button" data-action="toggle-theme" title="切换主题" aria-label="切换主题"><i data-lucide="${currentTheme() === "dark" ? "sun" : "moon"}" aria-hidden="true"></i></button>
