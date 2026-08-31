@@ -1,5 +1,6 @@
 const API_BASE = String(window.NAVIGUIDE_API_BASE || "/api").replace(/\/$/, "");
 const THEME_KEY = "guide-admin-theme";
+const DATA_NAV_KEY = "guide-admin-data-nav-expanded";
 const TONES = [
   ["teal", "青绿"],
   ["blue", "蓝色"],
@@ -22,6 +23,7 @@ const state = {
   statsPreset: "7d",
   statsGranularity: "hour",
   activeView: "dashboard",
+  dataNavExpanded: readStoredDataNavExpanded(),
   projectSearch: "",
   projectCategory: "all",
   modal: null,
@@ -170,22 +172,23 @@ function renderLogin() {
 function renderShell() {
   const content = state.loading ? renderLoading() : renderPage();
   const dataSectionActive = DATA_VIEWS.has(state.activeView);
+  const dataNavExpanded = state.dataNavExpanded;
   return `<div class="admin-shell">
     <aside class="sidebar" aria-label="后台导航">
-      <span class="sidebar-eyebrow">数据中心</span>
       <nav class="sidebar-nav">
+        <span class="sidebar-eyebrow sidebar-eyebrow--content">内容管理</span>
+        ${renderNavButton("projects", "folder-plus", "项目教程", state.links.length)}
+        ${renderNavButton("categories", "settings-2", "分类管理", state.categories.length)}
+        <span class="sidebar-eyebrow sidebar-eyebrow--data">数据中心</span>
         <div class="nav-group">
-          ${renderNavButton("dashboard", "layout-dashboard", "数据概览", "", { parent: true, active: dataSectionActive })}
-          <div class="nav-subnav" aria-label="数据概览子菜单">
+          ${renderNavButton("dashboard", "layout-dashboard", "数据概览", "", { parent: true, active: dataSectionActive, action: "toggle-data-nav", expanded: dataNavExpanded })}
+          <div id="data-overview-subnav" class="nav-subnav${dataNavExpanded ? "" : " is-collapsed"}" aria-label="数据概览子菜单" aria-hidden="${dataNavExpanded ? "false" : "true"}">
             ${renderNavButton("dashboard", "chart-column", "总览", "", { sub: true })}
             ${renderNavButton("analytics-trend", "activity", "访问趋势", "", { sub: true })}
             ${renderNavButton("analytics-sources", "globe-2", "访问来源", "", { sub: true })}
             ${renderNavButton("analytics-projects", "mouse-pointer-click", "项目点击", "", { sub: true })}
           </div>
         </div>
-        <span class="sidebar-eyebrow sidebar-eyebrow--content">内容管理</span>
-        ${renderNavButton("projects", "folder-plus", "项目教程", state.links.length)}
-        ${renderNavButton("categories", "settings-2", "分类管理", state.categories.length)}
       </nav>
       <div class="sidebar-note"><span>当前可见教程</span><strong>${formatNumber(state.links.filter((item) => item.enabled !== false).length)} 篇</strong></div>
     </aside>
@@ -208,8 +211,10 @@ function renderNavButton(view, icon, label, count, options = {}) {
   const active = options.active ?? (state.activeView === view);
   const classes = ["nav-button", active ? "active" : "", options.parent ? "nav-parent" : "", options.sub ? "nav-button-sub" : ""].filter(Boolean).join(" ");
   const current = active && !options.parent ? ` aria-current="page"` : "";
+  const action = options.action || "navigate";
+  const expanded = options.parent ? ` aria-expanded="${options.expanded !== false ? "true" : "false"}" aria-controls="data-overview-subnav"` : "";
   const chevron = options.parent ? `<i class="nav-chevron" data-lucide="chevron-down" aria-hidden="true"></i>` : "";
-  return `<button class="${classes}" type="button" data-action="navigate" data-view="${view}"${current}><i data-lucide="${icon}" aria-hidden="true"></i><span class="nav-label">${label}</span>${count !== "" ? `<span class="nav-count">${formatNumber(count)}</span>` : ""}${chevron}</button>`;
+  return `<button class="${classes}" type="button" data-action="${action}" data-view="${view}"${current}${expanded}><i data-lucide="${icon}" aria-hidden="true"></i><span class="nav-label">${label}</span>${count !== "" ? `<span class="nav-count">${formatNumber(count)}</span>` : ""}${chevron}</button>`;
 }
 
 function renderLoading() {
@@ -365,6 +370,7 @@ function renderStatsToolbar() {
       <label class="range-field"><span>开始日期</span><input class="date-input" name="from" type="date" value="${escapeAttribute(state.statsFrom)}" max="${escapeAttribute(today)}" required${disabled} /></label>
       <label class="range-field"><span>结束日期</span><input class="date-input" name="to" type="date" value="${escapeAttribute(state.statsTo)}" max="${escapeAttribute(today)}" required${disabled} /></label>
       <label class="range-field"><span>统计粒度</span><select class="date-input granularity-select" name="granularity"${disabled}><option value="hour" ${granularity === "hour" ? "selected" : ""}>按小时</option><option value="day" ${granularity === "day" ? "selected" : ""}>按天</option></select></label>
+      <button class="secondary-button stats-reset" type="button" data-action="reset-stats-filter"${disabled}>重置筛选条件</button>
       <button class="secondary-button stats-submit" data-role="stats-submit" type="submit" aria-busy="${loading ? "true" : "false"}"${disabled}><i class="stats-submit-icon${busy ? " is-spinning" : ""}" data-lucide="filter" aria-hidden="true"></i><span data-stats-submit-label>${busy ? "更新中…" : "应用筛选"}</span></button>
     </form>
   </section>`;
@@ -408,6 +414,8 @@ function syncStatsToolbar() {
   if (submitIcon) submitIcon.classList.toggle("is-spinning", busy);
   const submitLabel = toolbar.querySelector("[data-stats-submit-label]");
   if (submitLabel) submitLabel.textContent = busy ? "更新中…" : "应用筛选";
+  const reset = toolbar.querySelector("[data-action='reset-stats-filter']");
+  if (reset) reset.disabled = loading;
   syncStatsResultsBusy();
   syncStatsRefreshButtons();
 }
@@ -525,11 +533,11 @@ function renderProjects() {
   const links = filteredLinks();
   const categoryOptions = [`<option value="all">全部分类</option>`, ...state.categories.map((item) => `<option value="${escapeAttribute(item.id)}" ${state.projectCategory === item.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`)].join("");
   const rows = links.length ? links.map(renderProjectRow).join("") : `<div class="empty-state"><div><strong>${state.links.length ? "没有匹配的教程" : "还没有项目教程"}</strong><p>${state.links.length ? "调整搜索词或分类后再试。" : "先新建一篇项目教程，前台就能开始展示。"}</p></div></div>`;
-  return `${renderPageHeading("项目教程", "维护项目介绍、图文教程和前台显示状态；排序在同一分类内生效。", `<button class="primary-button" type="button" data-action="new-project"><i data-lucide="plus" aria-hidden="true"></i><span>新建教程</span></button>`)}
+  return `${renderPageHeading("项目教程", "维护项目介绍、图文教程和排序；前台是否可见请用每行左侧的启用胶囊按钮切换。", `<button class="primary-button" type="button" data-action="new-project"><i data-lucide="plus" aria-hidden="true"></i><span>新建教程</span></button>`)}
     ${renderContentError()}
     <div class="toolbar">
       <form class="toolbar-filters" data-form="project-filter">
-        <label class="search-input"><span class="visually-hidden">搜索教程</span><input name="search" value="${escapeAttribute(state.projectSearch)}" placeholder="搜索标题、简介或说明" /></label>
+        <label class="search-input"><span class="visually-hidden">搜索教程</span><input name="search" value="${escapeAttribute(state.projectSearch)}" placeholder="搜索标题、卡片简介、分类或状态" /></label>
         <select class="filter-select" name="category" aria-label="按分类筛选">${categoryOptions}</select>
         <button class="secondary-button" type="submit">筛选</button>
       </form>
@@ -546,15 +554,16 @@ function renderProjectRow(link) {
   const cover = image
     ? `<span class="project-cover has-image"><img src="${escapeAttribute(image)}" alt="" /></span>`
     : `<span class="project-cover">${escapeHtml(link.mark || "指")}</span>`;
+  const visibilityLabel = link.enabled === false ? "已隐藏" : "已启用";
   return `<article class="project-row">
     ${cover}
     <div class="project-main"><div class="project-title-row"><span class="status-dot ${link.enabled === false ? "off" : ""}" aria-hidden="true"></span><strong class="project-title">${escapeHtml(link.title)}</strong></div><span class="project-description">${escapeHtml(link.description || "未填写简介")}</span></div>
-    <div class="project-meta"><strong>${escapeHtml(link.category || "未分类")}</strong><span>${escapeHtml(link.note || "未填写说明")}</span></div>
-    <div class="project-meta"><span class="status-tag ${link.enabled === false ? "off" : ""}">${escapeHtml(link.enabled === false ? "已隐藏" : (link.status || "已发布"))}</span></div>
+    <div class="project-meta"><strong>${escapeHtml(link.category || "未分类")}</strong><span>${escapeHtml(link.note || "未填写卡片说明")}</span></div>
+    <div class="project-meta"><span class="status-tag ${link.enabled === false ? "off" : ""}">${escapeHtml(link.status || "待核实")}</span></div>
+    <button class="visibility-pill ${link.enabled === false ? "is-off" : "is-on"}" type="button" data-action="toggle-project" data-id="${escapeAttribute(link.id)}" aria-pressed="${link.enabled === false ? "false" : "true"}" title="${link.enabled === false ? "点击显示到前台" : "点击从前台隐藏"}"><span class="visibility-pill-dot" aria-hidden="true"></span><span>${visibilityLabel}</span></button>
     <div class="row-actions" aria-label="${escapeAttribute(`${link.title} 的操作`)}">
       <button class="icon-button" type="button" data-action="move-project-up" data-id="${escapeAttribute(link.id)}" title="上移排序" aria-label="上移排序" ${index <= 0 ? "disabled" : ""}><i data-lucide="arrow-up" aria-hidden="true"></i></button>
       <button class="icon-button" type="button" data-action="move-project-down" data-id="${escapeAttribute(link.id)}" title="下移排序" aria-label="下移排序" ${index === siblings.length - 1 ? "disabled" : ""}><i data-lucide="arrow-down" aria-hidden="true"></i></button>
-      <button class="icon-button" type="button" data-action="toggle-project" data-id="${escapeAttribute(link.id)}" title="${link.enabled === false ? "显示到前台" : "从前台隐藏"}" aria-label="${link.enabled === false ? "显示到前台" : "从前台隐藏"}"><i data-lucide="${link.enabled === false ? "check" : "settings-2"}" aria-hidden="true"></i></button>
       <button class="icon-button" type="button" data-action="edit-project" data-id="${escapeAttribute(link.id)}" title="编辑教程" aria-label="编辑教程"><i data-lucide="pencil" aria-hidden="true"></i></button>
       <button class="icon-button" type="button" data-action="delete-project" data-id="${escapeAttribute(link.id)}" title="删除教程" aria-label="删除教程"><i data-lucide="trash-2" aria-hidden="true"></i></button>
     </div>
@@ -563,21 +572,22 @@ function renderProjectRow(link) {
 
 function renderCategories() {
   const rows = state.categories.length ? state.categories.map(renderCategoryRow).join("") : `<div class="empty-state"><div><strong>还没有分类</strong><p>新建分类后即可把项目教程放入其中。</p></div></div>`;
-  return `${renderPageHeading("分类管理", "分类决定首页的浏览顺序。删除分类时，可将其中的教程转移到其他分类。", `<button class="primary-button" type="button" data-action="new-category"><i data-lucide="plus" aria-hidden="true"></i><span>新建分类</span></button>`)}
+  return `${renderPageHeading("分类管理", "分类决定首页的浏览顺序；前台是否可见请用每行左侧的启用胶囊按钮切换。删除分类时，可将其中的教程转移到其他分类。", `<button class="primary-button" type="button" data-action="new-category"><i data-lucide="plus" aria-hidden="true"></i><span>新建分类</span></button>`)}
     ${renderContentError()}
     <section class="category-list" aria-label="项目分类列表">${rows}</section>`;
 }
 
 function renderCategoryRow(category, index) {
   const projectCount = state.links.filter((item) => item.category === category.name).length;
+  const visibilityLabel = category.enabled === false ? "已隐藏" : "已启用";
   return `<article class="category-row">
     <span class="category-order">${String(index + 1).padStart(2, "0")}</span>
     <div class="category-main"><div class="category-title-row"><span class="status-dot ${category.enabled === false ? "off" : ""}" aria-hidden="true"></span><strong class="category-title">${escapeHtml(category.name)}</strong></div><span class="category-description">${escapeHtml(category.description || "未填写分类说明")}</span></div>
-    <div class="project-meta"><strong>${formatNumber(projectCount)} 篇教程</strong><span class="status-tag ${category.enabled === false ? "off" : ""}">${category.enabled === false ? "前台隐藏" : "前台显示"}</span></div>
+    <div class="project-meta"><strong>${formatNumber(projectCount)} 篇教程</strong><span class="status-tag">${category.enabled === false ? "分类隐藏" : "分类显示"}</span></div>
+    <button class="visibility-pill ${category.enabled === false ? "is-off" : "is-on"}" type="button" data-action="toggle-category" data-id="${escapeAttribute(category.id)}" aria-pressed="${category.enabled === false ? "false" : "true"}" title="${category.enabled === false ? "点击显示到前台" : "点击从前台隐藏"}"><span class="visibility-pill-dot" aria-hidden="true"></span><span>${visibilityLabel}</span></button>
     <div class="row-actions" aria-label="${escapeAttribute(`${category.name} 的操作`)}">
       <button class="icon-button" type="button" data-action="move-category-up" data-id="${escapeAttribute(category.id)}" title="上移排序" aria-label="上移排序" ${index <= 0 ? "disabled" : ""}><i data-lucide="arrow-up" aria-hidden="true"></i></button>
       <button class="icon-button" type="button" data-action="move-category-down" data-id="${escapeAttribute(category.id)}" title="下移排序" aria-label="下移排序" ${index === state.categories.length - 1 ? "disabled" : ""}><i data-lucide="arrow-down" aria-hidden="true"></i></button>
-      <button class="icon-button" type="button" data-action="toggle-category" data-id="${escapeAttribute(category.id)}" title="${category.enabled === false ? "显示到前台" : "从前台隐藏"}" aria-label="${category.enabled === false ? "显示到前台" : "从前台隐藏"}"><i data-lucide="${category.enabled === false ? "check" : "settings-2"}" aria-hidden="true"></i></button>
       <button class="icon-button" type="button" data-action="edit-category" data-id="${escapeAttribute(category.id)}" title="编辑分类" aria-label="编辑分类"><i data-lucide="pencil" aria-hidden="true"></i></button>
       <button class="icon-button" type="button" data-action="delete-category" data-id="${escapeAttribute(category.id)}" title="删除分类" aria-label="删除分类"><i data-lucide="trash-2" aria-hidden="true"></i></button>
     </div>
@@ -604,7 +614,7 @@ function renderModal() {
 function renderProjectModal(link) {
   const existing = Boolean(link.id);
   const categoryOptions = state.categories.map((category) => `<option value="${escapeAttribute(category.name)}" ${link.category === category.name ? "selected" : ""}>${escapeHtml(category.name)}${category.enabled === false ? "（已隐藏）" : ""}</option>`).join("");
-  const tutorial = link.guide || stepsToText(link.steps);
+  const editorSteps = editorStepsForLink(link);
   const toneOptions = TONES.map(([tone, label]) => `<label class="tone-option tone-${tone}"><input type="radio" name="tone" value="${tone}" ${link.tone === tone ? "checked" : ""} /><span class="tone-swatch" aria-hidden="true"></span>${label}</label>`).join("");
   const noCategories = state.categories.length === 0;
   const cover = link.cover || link.image || "";
@@ -613,29 +623,89 @@ function renderProjectModal(link) {
     <header class="modal-header editor-header"><div><span class="editor-kicker">项目教程</span><h2 id="project-editor-title">${existing ? "编辑项目教程" : "新建项目教程"}</h2><p>保存后，内容会同步到前台项目索引。</p></div><button class="icon-button modal-close" type="button" data-action="close-modal" title="关闭编辑器" aria-label="关闭编辑器"><i data-lucide="x" aria-hidden="true"></i></button></header>
     <form class="editor-form editor-project-form" data-form="project">
       <div class="editor-scroll">
-        <section class="editor-section editor-section--first" aria-labelledby="project-basics-title"><div class="editor-section-heading"><div><h3 id="project-basics-title" class="editor-section-title">基础信息</h3><p>设置教程所属位置和列表中最先看到的信息。</p></div></div>
+        <section class="editor-section editor-section--front" aria-labelledby="project-front-title"><div class="editor-section-heading"><div><span class="editor-section-kicker">未点击卡片</span><h3 id="project-front-title" class="editor-section-title">卡片前方</h3><p>用户在首页还没有点击卡片时，直接看到的内容。</p></div><span class="editor-section-chip">首页卡片</span></div>
           <div class="form-grid">
-            <div class="field field--title"><label for="project-title">项目标题</label><input id="project-title" name="title" maxlength="80" value="${escapeAttribute(link.title || "")}" placeholder="例如：奶茶首单优惠" required /></div>
-            <div class="field field--category"><label for="project-category">所属分类</label><select id="project-category" name="category" required ${noCategories ? "disabled" : ""}>${categoryOptions}</select>${noCategories ? `<p class="field-help">请先创建一个分类。</p>` : ""}</div>
-            <div class="field field--status"><label for="project-status">状态文案</label><input id="project-status" name="status" maxlength="24" value="${escapeAttribute(link.status || "待核实")}" placeholder="例如：实测可用" required /></div>
-            <div class="field field--mark"><label for="project-mark">卡片标记</label><input id="project-mark" name="mark" data-control="project-mark" maxlength="12" value="${escapeAttribute(mark)}" placeholder="例如：益" required /><p class="field-help">无封面时，显示在前台卡片左侧的短字。</p></div>
+            <div class="field field--category"><label for="project-category">所属分类</label><select id="project-category" name="category" required ${noCategories ? "disabled" : ""}>${categoryOptions}</select><p class="field-help">首页分类标题和详情顶部分类标识都使用这里的值。</p>${noCategories ? `<p class="field-help">请先创建一个分类。</p>` : ""}</div>
+            <div class="field field--title"><label for="project-title">项目标题</label><input id="project-title" name="title" maxlength="80" value="${escapeAttribute(link.title || "")}" placeholder="例如：奶茶首单优惠" required /><p class="field-help">同时显示在首页卡片和点击后的详情标题。</p></div>
+            <div class="field field--status"><label for="project-status">状态文案</label><input id="project-status" name="status" maxlength="24" value="${escapeAttribute(link.status || "待核实")}" placeholder="例如：实测可用" required /><p class="field-help">显示在卡片前方顶部，也会显示在详情封面上。</p></div>
+            <div class="field field--mark"><label for="project-mark">卡片标记</label><input id="project-mark" name="mark" data-control="project-mark" maxlength="12" value="${escapeAttribute(mark)}" placeholder="例如：益" required /><p class="field-help">显示在首页卡片左侧；也会出现在点击后的详情封面上。</p></div>
+            <div class="field wide field--description"><label for="project-description">卡片简介</label><textarea id="project-description" name="description" maxlength="240" placeholder="一句话说明这张卡片能帮用户做什么" required>${escapeHtml(link.description || "")}</textarea><p class="field-help">这是卡片前方的主简介；详情介绍留空时会自动沿用它。</p></div>
+            <div class="field wide field--note"><label for="project-note">卡片说明</label><input id="project-note" name="note" maxlength="80" value="${escapeAttribute(link.note || "")}" placeholder="例如：准备时间 · 5 分钟" required /><p class="field-help">显示在首页卡片底部的补充信息，例如耗时、门槛或适用人群。</p></div>
           </div>
         </section>
-        <section class="editor-section" aria-labelledby="project-presentation-title"><div class="editor-section-heading"><div><h3 id="project-presentation-title" class="editor-section-title">前台展示</h3><p>简洁说明项目价值，并配置用户打开教程后的入口。</p></div></div><div class="form-grid">
-          <div class="field wide field--description"><label for="project-description">卡片简介</label><textarea id="project-description" name="description" maxlength="240" placeholder="一句话说明这张卡片能帮用户做什么" required>${escapeHtml(link.description || "")}</textarea></div>
-          <div class="field field--note"><label for="project-note">说明</label><input id="project-note" name="note" maxlength="80" value="${escapeAttribute(link.note || "")}" placeholder="例如：准备时间 · 5 分钟" required /></div>
-          <div class="field field--url"><label for="project-url">入口 URL</label><input id="project-url" name="url" type="url" maxlength="2048" value="${escapeAttribute(link.url || "")}" placeholder="https://example.com" required /></div>
-          <div class="field wide field--cover"><label for="project-cover">封面图 URL</label><div class="cover-field-layout"><div><div class="cover-input-row"><input id="project-cover" name="cover" data-control="project-cover" maxlength="2048" value="${escapeAttribute(cover)}" placeholder="https://... 或 /images/cover.jpg" /><button class="icon-button cover-clear" type="button" data-action="clear-cover" title="清除封面链接" aria-label="清除封面链接" ${cover ? "" : "disabled"}><i data-lucide="x" aria-hidden="true"></i></button></div><p class="field-help">支持 http、https 或站内路径；留空则用项目标记显示。</p></div><div id="project-cover-preview" class="project-cover-preview" data-mark="${escapeAttribute(mark)}" aria-live="polite"><span class="cover-preview-mark">${escapeHtml(mark)}</span><span class="cover-preview-copy">${cover ? "正在加载预览" : "未设置封面"}</span></div></div></div>
-        </div></section>
-        <section class="editor-section" aria-labelledby="project-guide-title"><div class="editor-section-heading"><div><h3 id="project-guide-title" class="editor-section-title">教程内容</h3><p>每一行会被整理成前台的一条操作步骤。</p></div></div><div class="form-grid">
-          <div class="field wide"><label for="project-guide">教程正文</label><textarea id="project-guide" class="tall" name="guide" maxlength="100000" placeholder="每行一条操作步骤；会自动同步为前台的步骤列表。">${escapeHtml(tutorial)}</textarea><p class="field-help">最多支持 100 行步骤。</p></div>
-          <div class="field wide"><label for="project-tips">小提示</label><textarea id="project-tips" name="tips" maxlength="2000" placeholder="提醒用户注意条件、时效或常见问题。">${escapeHtml(link.tips || "")}</textarea></div>
+        <section class="editor-section editor-section--back" aria-labelledby="project-back-title"><div class="editor-section-heading"><div><span class="editor-section-kicker">点击卡片后</span><h3 id="project-back-title" class="editor-section-title">卡片后方</h3><p>用户点击卡片后打开详情弹层时，看到的完整介绍和操作内容。</p></div><span class="editor-section-chip">详情弹层</span></div><div class="form-grid">
+          <div class="field wide field--detail-description"><label for="project-detail-description">详情介绍</label><textarea id="project-detail-description" name="detailDescription" maxlength="1000" placeholder="点击卡片后显示在标题下方的完整介绍；留空则沿用卡片简介。">${escapeHtml(link.detailDescription || "")}</textarea><p class="field-help">对应前台详情弹层标题下方的介绍文字，与卡片前方的“卡片简介”分开维护。</p></div>
+          <div class="field wide field--cover"><label for="project-cover">封面图 URL</label><div class="cover-field-layout"><div><div class="cover-input-row"><input id="project-cover" name="cover" data-control="project-cover" maxlength="2048" value="${escapeAttribute(cover)}" placeholder="https://... 或 /images/cover.jpg" /><button class="icon-button cover-clear" type="button" data-action="clear-cover" title="清除封面链接" aria-label="清除封面链接" ${cover ? "" : "disabled"}><i data-lucide="x" aria-hidden="true"></i></button></div><p class="field-help">卡片后方顶部的封面；支持 http、https 或站内路径，留空则使用卡片标记。</p></div><div id="project-cover-preview" class="project-cover-preview" data-mark="${escapeAttribute(mark)}" aria-live="polite"><span class="cover-preview-mark">${escapeHtml(mark)}</span><span class="cover-preview-copy">${cover ? "正在加载预览" : "未设置封面"}</span></div></div></div>
+          <div class="field wide field--steps"><div class="field-heading"><div><span class="field-label">操作路径</span><p class="field-help">这里的每一步会显示在详情弹层的“操作路径”中，可分别填写文字和图片。</p></div><button class="secondary-button compact-button" type="button" data-action="add-step"><i data-lucide="plus" aria-hidden="true"></i><span>添加步骤</span></button></div><div class="step-editor" data-step-list>${renderStepEditor(editorSteps)}</div><p class="field-help">最多 100 步；步骤图片使用公开可访问的 http、https 或站内路径。</p></div>
+          <div class="field wide field--tips"><label for="project-tips">小提示</label><textarea id="project-tips" name="tips" maxlength="2000" placeholder="提醒用户注意条件、时效或常见问题。">${escapeHtml(link.tips || "")}</textarea><p class="field-help">对应详情弹层底部的“小提示”区域。</p></div>
+          <div class="field wide field--url"><label for="project-url">入口 URL</label><input id="project-url" name="url" type="url" maxlength="2048" value="${escapeAttribute(link.url || "")}" placeholder="https://example.com" required /><p class="field-help">对应详情弹层底部的“打开项目入口”按钮。</p></div>
         </div></section>
         <details class="editor-details"><summary><span><strong>视觉和内部信息</strong><small>设置卡片色调，或记录仅后台可见的备注。</small></span><i data-lucide="chevron-down" aria-hidden="true"></i></summary><div class="editor-details-body"><div class="form-grid"><div class="field wide"><span class="field-label">色调</span><div class="tone-options">${toneOptions}</div></div><div class="field wide"><label for="project-admin-note">后台备注</label><textarea id="project-admin-note" name="adminNote" maxlength="500" placeholder="仅后台可见，例如来源、复核日期或待补充内容。">${escapeHtml(link.adminNote || "")}</textarea></div></div></div></details>
       </div>
-      <footer class="form-footer editor-footer"><label class="toggle-field editor-visibility"><input name="enabled" type="checkbox" ${link.enabled !== false ? "checked" : ""} /><span class="toggle-track" aria-hidden="true"></span><span class="toggle-copy">在前台显示<small>关闭后，前台不再展示这篇教程。</small></span></label><span class="form-footer-note">${existing ? "编辑会保留原排序位置。" : "新教程会添加到所属分类的末尾。"}</span><div class="modal-actions"><button class="secondary-button" type="button" data-action="close-modal">取消</button><button class="primary-button" type="submit" ${noCategories ? "disabled" : ""}><span>保存教程</span><i data-lucide="check" aria-hidden="true"></i></button></div></footer>
+      <footer class="form-footer editor-footer"><span class="form-footer-note">${existing ? "编辑会保留原排序位置。" : "新教程会添加到所属分类的末尾。"} 可见性请在项目教程列表左侧的胶囊按钮中切换。</span><div class="modal-actions"><button class="secondary-button" type="button" data-action="close-modal">取消</button><button class="primary-button" type="submit" ${noCategories ? "disabled" : ""}><span>保存教程</span><i data-lucide="check" aria-hidden="true"></i></button></div></footer>
     </form>
   </section></div>`;
+}
+
+function editorStepsForLink(link) {
+  const raw = array(link?.steps).length ? link.steps : String(link?.guide || "").split(/\r?\n/).map((content) => content.trim()).filter(Boolean);
+  return raw.map((step) => {
+    if (typeof step === "string") return { title: "", content: step, image: "" };
+    return { title: String(step?.title || ""), content: String(step?.content || step?.text || step?.description || ""), image: String(step?.image || step?.imageUrl || "") };
+  }).filter((step) => step.title || step.content || step.image);
+}
+
+function renderStepEditor(steps) {
+  const rows = array(steps).map((step, index) => renderStepEditorRow(step, index)).join("");
+  return `${rows || `<p class="step-editor-empty" data-step-empty>还没有添加操作步骤，点击右上角“添加步骤”开始编辑。</p>`}`;
+}
+
+function renderStepEditorRow(step = {}, index = 0) {
+  const number = String(index + 1).padStart(2, "0");
+  return `<article class="step-editor-row" data-step-row><div class="step-editor-row-head"><span class="step-editor-number" data-step-number>步骤 ${number}</span><button class="quiet-button step-remove" type="button" data-action="remove-step" aria-label="删除步骤 ${number}"><i data-lucide="trash-2" aria-hidden="true"></i><span>删除</span></button></div><div class="step-editor-grid"><div class="field"><label for="step-title-${index}">步骤标题</label><input id="step-title-${index}" data-step-field="title" maxlength="120" value="${escapeAttribute(step.title || "")}" placeholder="例如：先领取新人券" /></div><div class="field"><label for="step-image-${index}">步骤图片 URL（可选）</label><input id="step-image-${index}" data-step-field="image" maxlength="2048" value="${escapeAttribute(step.image || "")}" placeholder="https://... 或 /images/step-01.jpg" /></div><div class="field wide"><label for="step-content-${index}">步骤说明</label><textarea id="step-content-${index}" data-step-field="content" maxlength="2000" placeholder="说明这一动作应该怎么做，以及完成后会看到什么。">${escapeHtml(step.content || "")}</textarea></div></div></article>`;
+}
+
+function addEditorStep() {
+  const list = document.querySelector("[data-step-list]");
+  if (!list) return;
+  const rows = list.querySelectorAll("[data-step-row]");
+  if (rows.length >= 100) {
+    showToast("操作路径最多支持 100 步", "error");
+    return;
+  }
+  list.querySelector("[data-step-empty]")?.remove();
+  list.insertAdjacentHTML("beforeend", renderStepEditorRow({}, rows.length));
+  renumberEditorSteps();
+  list.querySelectorAll("[data-step-row]:last-child [data-step-field='title']")[0]?.focus();
+  refreshIcons(list);
+}
+
+function removeEditorStep(row) {
+  if (!row) return;
+  const list = row.closest("[data-step-list]");
+  row.remove();
+  if (!list) return;
+  if (!list.querySelector("[data-step-row]")) list.insertAdjacentHTML("beforeend", `<p class="step-editor-empty" data-step-empty>还没有添加操作步骤，点击右上角“添加步骤”开始编辑。</p>`);
+  renumberEditorSteps();
+}
+
+function renumberEditorSteps() {
+  const list = document.querySelector("[data-step-list]");
+  if (!list) return;
+  list.querySelectorAll("[data-step-row]").forEach((row, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    const numberElement = row.querySelector("[data-step-number]");
+    if (numberElement) numberElement.textContent = `步骤 ${number}`;
+    const remove = row.querySelector("[data-action='remove-step']");
+    if (remove) remove.setAttribute("aria-label", `删除步骤 ${number}`);
+    row.querySelectorAll("[data-step-field]").forEach((control) => {
+      const field = control.dataset.stepField;
+      const id = `step-${field}-${index}`;
+      control.id = id;
+      const label = row.querySelector(`label[for^="step-${field}-"]`);
+      if (label) label.htmlFor = id;
+    });
+  });
 }
 
 function renderCategoryModal(category) {
@@ -646,7 +716,7 @@ function renderCategoryModal(category) {
       <div class="field-stack">
         <div class="field"><label for="category-name">分类名称</label><input id="category-name" name="name" maxlength="40" value="${escapeAttribute(category.name || "")}" placeholder="例如：生活权益" required /></div>
         <div class="field"><label for="category-description">分类说明</label><textarea id="category-description" name="description" maxlength="120" placeholder="用于告诉用户这个分类包含什么内容。">${escapeHtml(category.description || "")}</textarea></div>
-        <label class="toggle-field"><input name="enabled" type="checkbox" ${category.enabled !== false ? "checked" : ""} /><span class="toggle-track" aria-hidden="true"></span><span class="toggle-copy">在前台显示<small>隐藏分类会同时隐藏其中的项目教程。</small></span></label>
+        <p class="editor-inline-note">分类是否在前台显示，请在分类管理列表左侧的启用胶囊按钮中切换。</p>
       </div>
       <footer class="form-footer"><span class="form-footer-note">${existing ? "修改名称会同步更新其中的项目。" : "新分类会排在现有分类最后。"}</span><div class="modal-actions"><button class="secondary-button" type="button" data-action="close-modal">取消</button><button class="primary-button" type="submit"><span>保存分类</span><i data-lucide="check" aria-hidden="true"></i></button></div></footer>
     </form>
@@ -681,6 +751,14 @@ async function handleClick(event) {
   try {
     if (action === "navigate") {
       state.activeView = button.dataset.view || "dashboard";
+      if (DATA_VIEWS.has(state.activeView)) setDataNavExpanded(true);
+      state.contentError = "";
+      render();
+      return;
+    }
+    if (action === "toggle-data-nav") {
+      if (!DATA_VIEWS.has(state.activeView)) state.activeView = button.dataset.view || "dashboard";
+      setDataNavExpanded(!state.dataNavExpanded);
       state.contentError = "";
       render();
       return;
@@ -689,6 +767,12 @@ async function handleClick(event) {
       await updateStatsPreset(button.dataset.range || "7d");
       return;
     }
+    if (action === "reset-stats-filter") {
+      await resetStatsFilter();
+      return;
+    }
+    if (action === "add-step") return addEditorStep();
+    if (action === "remove-step") return removeEditorStep(button.closest("[data-step-row]"));
     if (action === "toggle-theme") return toggleTheme();
     if (action === "logout") {
       await logout();
@@ -836,6 +920,11 @@ async function updateStatsPreset(preset) {
   await refreshStats();
 }
 
+async function resetStatsFilter() {
+  if (state.statsLoading) return;
+  await updateStatsPreset("7d");
+}
+
 async function refreshStats() {
   if (!state.session || state.statsLoading) return;
   const requestId = ++state.statsRequestId;
@@ -898,7 +987,7 @@ function updateProjectFilter(form) {
 
 function openProjectEditor(link = null) {
   const defaultCategory = state.categories[0]?.name || "";
-  state.modal = { type: "project", entity: link ? { ...link } : { category: defaultCategory, title: "", mark: nextMark(), tone: "teal", status: "待核实", description: "", note: "", adminNote: "", cover: "", guide: "", tips: "", steps: [], url: "", enabled: true } };
+  state.modal = { type: "project", entity: link ? { ...link } : { category: defaultCategory, title: "", mark: nextMark(), tone: "teal", status: "待核实", description: "", detailDescription: "", note: "", adminNote: "", cover: "", guide: "", tips: "", steps: [], url: "", enabled: true } };
   render();
 }
 
@@ -924,10 +1013,18 @@ async function saveProject(form) {
   const existing = modal?.entity;
   if (!existing) return;
   const data = new FormData(form);
-  const guide = String(data.get("guide") || "").trim();
-  const steps = guide ? guide.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) : [];
-  if (steps.length > 100) throw new Error("教程正文最多支持 100 行步骤");
-  const enabled = data.get("enabled") === "on";
+  const stepRows = [...form.querySelectorAll("[data-step-row]")];
+  const steps = [];
+  stepRows.forEach((row, index) => {
+    const title = String(row.querySelector("[data-step-field='title']")?.value || "").trim();
+    const content = String(row.querySelector("[data-step-field='content']")?.value || "").trim();
+    const image = String(row.querySelector("[data-step-field='image']")?.value || "").trim();
+    if (!title && !content && !image) return;
+    if (!title && !content) throw new Error(`第 ${index + 1} 步请填写步骤标题或步骤说明`);
+    steps.push({ title, content, image });
+  });
+  const guide = steps.map((step) => [step.title, step.content].filter(Boolean).join("：")).join("\n");
+  if (steps.length > 100) throw new Error("操作路径最多支持 100 步");
   const payload = {
     category: String(data.get("category") || ""),
     title: String(data.get("title") || ""),
@@ -935,6 +1032,7 @@ async function saveProject(form) {
     tone: String(data.get("tone") || "teal"),
     status: String(data.get("status") || ""),
     description: String(data.get("description") || ""),
+    detailDescription: String(data.get("detailDescription") || ""),
     note: String(data.get("note") || ""),
     url: String(data.get("url") || ""),
     cover: String(data.get("cover") || ""),
@@ -949,11 +1047,6 @@ async function saveProject(form) {
   } else {
     result = await api("/admin/links", { method: "POST", body: payload });
   }
-  let saved = result.link;
-  if (saved && saved.enabled !== enabled) {
-    const visibility = await api(`/admin/links/${encodeURIComponent(saved.id)}/enabled`, { method: "PATCH", body: { enabled, updatedAt: saved.updatedAt } });
-    saved = visibility.link || saved;
-  }
   state.modal = null;
   await refreshNavigation(false);
   showToast(existing.id ? "教程已更新" : "教程已新建");
@@ -964,18 +1057,12 @@ async function saveCategory(form) {
   const existing = modal?.entity;
   if (!existing) return;
   const data = new FormData(form);
-  const enabled = data.get("enabled") === "on";
   const payload = { name: String(data.get("name") || ""), description: String(data.get("description") || "") };
   let result;
   if (existing.id) {
     result = await api(`/admin/categories/${encodeURIComponent(existing.id)}`, { method: "PUT", body: { ...payload, updatedAt: existing.updatedAt } });
   } else {
     result = await api("/admin/categories", { method: "POST", body: payload });
-  }
-  let saved = result.category;
-  if (saved && saved.enabled !== enabled) {
-    const visibility = await api(`/admin/categories/${encodeURIComponent(saved.id)}/enabled`, { method: "PATCH", body: { enabled, updatedAt: saved.updatedAt } });
-    saved = visibility.category || saved;
   }
   state.modal = null;
   await refreshNavigation(false);
@@ -1054,6 +1141,20 @@ function toggleTheme() {
   render();
 }
 
+function readStoredDataNavExpanded() {
+  try {
+    const stored = localStorage.getItem(DATA_NAV_KEY);
+    return stored === null ? true : stored !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function setDataNavExpanded(expanded) {
+  state.dataNavExpanded = Boolean(expanded);
+  try { localStorage.setItem(DATA_NAV_KEY, state.dataNavExpanded ? "true" : "false"); } catch {}
+}
+
 function currentTheme() {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
@@ -1064,7 +1165,7 @@ function filteredLinks() {
   return state.links.filter((link) => {
     if (category && link.category !== category.name) return false;
     if (!search) return true;
-    return [link.title, link.description, link.note, link.status, link.category].some((value) => String(value || "").toLocaleLowerCase("zh-CN").includes(search));
+    return [link.title, link.description, link.detailDescription, link.note, link.status, link.category, link.tips, stepsToText(link.steps)].some((value) => String(value || "").toLocaleLowerCase("zh-CN").includes(search));
   });
 }
 

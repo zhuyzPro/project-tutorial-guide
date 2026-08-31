@@ -64,7 +64,9 @@ function normalizeData(data) {
 }
 
 function normalizeLink(item) {
-  const rawSteps = Array.isArray(item.steps) ? item.steps : splitSteps(item.tutorial || item.content || item.description);
+  const rawSteps = Array.isArray(item.steps) && item.steps.length
+    ? item.steps
+    : splitSteps(item.guide || item.tutorial || item.content || item.description);
   const steps = rawSteps.map((step) => {
     if (typeof step === "string") return { title: "", content: step.trim(), image: "" };
     if (!step || typeof step !== "object") return null;
@@ -74,7 +76,13 @@ function normalizeLink(item) {
       image: String(step.image || step.imageUrl || "").trim(),
     };
   }).filter((step) => step && (step.title || step.content || step.image));
-  return { ...item, steps, tips: item.tips || "", cover: item.cover || item.coverUrl || "" };
+  return {
+    ...item,
+    steps,
+    tips: item.tips || "",
+    cover: item.cover || item.coverUrl || "",
+    detailDescription: item.detailDescription || item.detail_description || "",
+  };
 }
 
 function splitSteps(value) { return String(value || "").split(/\n|。/).map((part) => part.trim()).filter(Boolean).slice(0, 5); }
@@ -148,6 +156,7 @@ function renderProjectCard(link, index) {
 function openDialog(id, trigger = null) {
   const link = navigationData.links.find((item) => item.id === id); if (!link) return;
   lastTrigger = trigger || document.activeElement;
+  const detailDescription = link.detailDescription || link.description || "";
   const cover = escapeAttribute(escapeCssUrl(link.cover || fallbackCover(link.tone)));
   const steps = link.steps.map((step) => {
     const title = escapeHtml(step.title || "");
@@ -156,7 +165,7 @@ function openDialog(id, trigger = null) {
     const text = `${title ? `<strong class="tutorial-step-title">${title}</strong>` : ""}${content ? `<span>${content}</span>` : ""}`;
     return `<li><div class="tutorial-step-content">${text}${image ? `<img class="tutorial-step-image" src="${escapeAttribute(image)}" alt="${escapeAttribute(step.title || `${link.title}步骤图片`)}" loading="lazy" />` : ""}</div></li>`;
   }).join("");
-  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-hero tone-${escapeAttribute(link.tone || "teal")}" style="--cover: url('${cover}')"><span class="project-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-copy"><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(link.description)}</p><div class="steps-heading"><span>操作路径</span><span>${link.steps.length} 步</span></div><ol class="tutorial-steps">${steps || '<li><div class="tutorial-step-content"><span>暂无详细步骤，请打开项目入口查看最新说明。</span></div></li>'}</ol>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}<a class="dialog-cta" href="${escapeAttribute(normalizeUrl(link.url))}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a></div>`;
+  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-hero tone-${escapeAttribute(link.tone || "teal")}" style="--cover: url('${cover}')"><span class="project-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-copy"><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(detailDescription)}</p><div class="steps-heading"><span>操作路径</span><span>${link.steps.length} 步</span></div><ol class="tutorial-steps">${steps || '<li><div class="tutorial-step-content"><span>暂无详细步骤，请打开项目入口查看最新说明。</span></div></li>'}</ol>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}<a class="dialog-cta" href="${escapeAttribute(normalizeUrl(link.url))}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a></div>`;
   const dialog = document.querySelector("#project-dialog");
   dialog.showModal();
   document.querySelector("#close-dialog")?.focus();
@@ -174,7 +183,7 @@ function closeDialog() {
 
 function matchesSearch(link) {
   const stepText = (link.steps || []).map((step) => [step.title, step.content, step.image].join(" ")).join(" ");
-  return [link.title, link.description, link.note, link.category, link.status, link.tips, stepText]
+  return [link.title, link.description, link.detailDescription, link.note, link.category, link.status, link.tips, stepText]
     .some((value) => String(value || "").toLowerCase().includes(searchTerm));
 }
 

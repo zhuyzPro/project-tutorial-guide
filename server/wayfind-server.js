@@ -209,6 +209,7 @@ db.exec(`
     tone TEXT NOT NULL,
     status TEXT NOT NULL,
     description TEXT NOT NULL,
+    detail_description TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL,
     admin_note TEXT NOT NULL DEFAULT '',
     cover TEXT NOT NULL DEFAULT '',
@@ -257,11 +258,17 @@ function ensureColumn(table, column, definition) {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all();
   if (!columns.some((entry) => entry.name === column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    return true;
   }
+  return false;
 }
 
 ensureColumn("categories", "enabled", "INTEGER NOT NULL DEFAULT 1");
 ensureColumn("links", "enabled", "INTEGER NOT NULL DEFAULT 1");
+const detailDescriptionAdded = ensureColumn("links", "detail_description", "TEXT NOT NULL DEFAULT ''");
+if (detailDescriptionAdded) {
+  db.prepare("UPDATE links SET detail_description = description WHERE trim(detail_description) = ''").run();
+}
 ensureColumn("links", "admin_note", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("links", "cover", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("links", "guide", "TEXT NOT NULL DEFAULT ''");
@@ -298,14 +305,14 @@ function initializeNavigationData() {
         });
 
         const insertLink = db.prepare(`
-          INSERT INTO links (id, category, title, mark, tone, status, description, note, cover, guide, steps, tips, url, position, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO links (id, category, title, mark, tone, status, description, detail_description, note, cover, guide, steps, tips, url, position, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         const positions = new Map(DEFAULT_CATEGORIES.map((category) => [category.name, 0]));
         for (const link of SEED_LINKS) {
           insertLink.run(
             crypto.randomUUID(), link.category, link.title, link.mark, link.tone, link.status,
-            link.description, link.note, link.cover || "", link.guide || "", JSON.stringify(link.steps || []), link.tips || "",
+            link.description, link.detailDescription || link.description || "", link.note, link.cover || "", link.guide || "", JSON.stringify(link.steps || []), link.tips || "",
             link.url, positions.get(link.category), now, now,
           );
           positions.set(link.category, positions.get(link.category) + 1);
@@ -640,25 +647,26 @@ function normalizeLink(input, existing = {}) {
   if (!TONES.has(tone)) throw Object.assign(new Error("色调不受支持"), { status: 400 });
 
   const coverValue = input.cover ?? input.image ?? existing.cover ?? existing.image ?? "";
-  const cover = textField(coverValue, "封面地址", { required: false, max: 2048 });
-  validateImageUrl(cover, "封面地址");
+  const cover = textField(coverValue, "封面图 URL", { required: false, max: 2048 });
+  validateImageUrl(cover, "封面图 URL");
 
-  const guide = textField(input.guide ?? input.content ?? existing.guide ?? existing.content ?? "", "教程内容", { required: false, max: 100_000 });
+  const guide = textField(input.guide ?? input.content ?? existing.guide ?? existing.content ?? "", "操作路径", { required: false, max: 100_000 });
   const rawSteps = input.steps ?? existing.steps ?? [];
   const steps = normalizeSteps(rawSteps);
   return {
     category,
-    title: textField(input.title ?? existing.title, "名称", { max: 80 }),
-    mark: textField(input.mark ?? existing.mark, "缩写", { max: 12 }),
+    title: textField(input.title ?? existing.title, "项目标题", { max: 80 }),
+    mark: textField(input.mark ?? existing.mark, "卡片标记", { max: 12 }),
     tone,
-    status: textField(input.status ?? existing.status, "状态", { max: 24 }),
-    description: textField(input.description ?? existing.description, "简介", { max: 240 }),
-    note: textField(input.note ?? existing.note, "说明", { max: 80 }),
+    status: textField(input.status ?? existing.status, "状态文案", { max: 24 }),
+    description: textField(input.description ?? existing.description, "卡片简介", { max: 240 }),
+    detailDescription: textField(input.detailDescription ?? input.detail_description ?? existing.detailDescription ?? existing.detail_description ?? "", "详情介绍", { required: false, max: 1_000 }),
+    note: textField(input.note ?? existing.note, "卡片说明", { max: 80 }),
     adminNote: textField(input.adminNote ?? existing.adminNote, "后台备注", { required: false, max: 500 }),
     cover,
     guide,
     steps,
-    tips: textField(input.tips ?? existing.tips ?? "", "使用提示", { required: false, max: 2_000 }),
+    tips: textField(input.tips ?? existing.tips ?? "", "小提示", { required: false, max: 2_000 }),
     url: parsed.toString(),
   };
 }
@@ -714,6 +722,7 @@ function toLink(row) {
     tone: row.tone,
     status: row.status,
     description: row.description,
+    detailDescription: row.detail_description ?? row.detailDescription ?? "",
     note: row.note,
     adminNote: row.admin_note ?? row.adminNote ?? "",
     cover: row.cover ?? row.image ?? "",
@@ -734,7 +743,7 @@ function getAllLinks() {
 }
 
 function getPublicLinks() {
-  return db.prepare("SELECT links.id, links.category, links.title, links.mark, links.tone, links.status, links.description, links.note, links.cover, links.guide, links.steps, links.tips, links.url, links.position, links.enabled, links.updated_at FROM links INNER JOIN categories ON categories.name = links.category WHERE links.enabled = 1 AND categories.enabled = 1 ORDER BY categories.position, links.position, links.title COLLATE NOCASE").all().map(toPublicLink);
+  return db.prepare("SELECT links.id, links.category, links.title, links.mark, links.tone, links.status, links.description, links.detail_description, links.note, links.cover, links.guide, links.steps, links.tips, links.url, links.position, links.enabled, links.updated_at FROM links INNER JOIN categories ON categories.name = links.category WHERE links.enabled = 1 AND categories.enabled = 1 ORDER BY categories.position, links.position, links.title COLLATE NOCASE").all().map(toPublicLink);
 }
 
 function toPublicLink(row) {
@@ -748,6 +757,7 @@ function toPublicLink(row) {
     tone: row.tone,
     status: row.status,
     description: row.description,
+    detailDescription: row.detail_description ?? row.detailDescription ?? "",
     note: row.note,
     cover,
     image: cover,
@@ -1207,8 +1217,8 @@ function handleAdminLink(req, res, method, id) {
       const link = normalizeLink(body);
       const now = nextUpdatedAt();
       const created = { id: crypto.randomUUID(), ...link, position: nextPosition(link.category), enabled: true, created_at: now, updated_at: now };
-      db.prepare(`INSERT INTO links (id, category, title, mark, tone, status, description, note, admin_note, cover, guide, steps, tips, url, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(created.id, created.category, created.title, created.mark, created.tone, created.status, created.description, created.note, created.adminNote, created.cover, created.guide, JSON.stringify(created.steps), created.tips, created.url, created.position, created.created_at, created.updated_at);
+      db.prepare(`INSERT INTO links (id, category, title, mark, tone, status, description, detail_description, note, admin_note, cover, guide, steps, tips, url, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(created.id, created.category, created.title, created.mark, created.tone, created.status, created.description, created.detailDescription, created.note, created.adminNote, created.cover, created.guide, JSON.stringify(created.steps), created.tips, created.url, created.position, created.created_at, created.updated_at);
       return sendJson(res, 201, { link: toLink(created) });
     }
     const existing = getLink(id);
@@ -1221,8 +1231,8 @@ function handleAdminLink(req, res, method, id) {
     const link = normalizeLink(body, existing);
     const now = nextUpdatedAt();
     const position = link.category === existing.category ? existing.position : nextPosition(link.category);
-    requireSingleChange(db.prepare(`UPDATE links SET category = ?, title = ?, mark = ?, tone = ?, status = ?, description = ?, note = ?, admin_note = ?, cover = ?, guide = ?, steps = ?, tips = ?, url = ?, position = ?, updated_at = ? WHERE id = ? AND updated_at = ?`)
-      .run(link.category, link.title, link.mark, link.tone, link.status, link.description, link.note, link.adminNote, link.cover, link.guide, JSON.stringify(link.steps), link.tips, link.url, position, now, id, updatedAt));
+    requireSingleChange(db.prepare(`UPDATE links SET category = ?, title = ?, mark = ?, tone = ?, status = ?, description = ?, detail_description = ?, note = ?, admin_note = ?, cover = ?, guide = ?, steps = ?, tips = ?, url = ?, position = ?, updated_at = ? WHERE id = ? AND updated_at = ?`)
+      .run(link.category, link.title, link.mark, link.tone, link.status, link.description, link.detailDescription, link.note, link.adminNote, link.cover, link.guide, JSON.stringify(link.steps), link.tips, link.url, position, now, id, updatedAt));
     return sendJson(res, 200, { link: getLink(id) });
   }).catch((error) => sendRequestError(res, error));
 }
