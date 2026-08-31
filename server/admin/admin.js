@@ -26,6 +26,12 @@ const state = {
   projectCategory: "all",
   modal: null,
   loading: false,
+  statsLoading: false,
+  statsBusyTimer: 0,
+  statsBusyVisible: false,
+  statsRequestId: 0,
+  statsAbortController: null,
+  statsTimeoutTimer: 0,
   contentError: "",
 };
 
@@ -64,7 +70,8 @@ async function api(path, options = {}) {
   let response;
   try {
     response = await fetch(`${API_BASE}${path}`, request);
-  } catch {
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
     throw Object.assign(new Error("无法连接后台服务，请检查服务是否启动"), { status: 0 });
   }
 
@@ -89,15 +96,21 @@ async function api(path, options = {}) {
 }
 
 async function loadWorkspace() {
-  if (!state.session) return;
+  if (!state.session || state.loading) return;
+  cancelStatsRequest();
+  const statsRequestId = ++state.statsRequestId;
+  if (state.statsBusyTimer) window.clearTimeout(state.statsBusyTimer);
+  state.statsLoading = false;
+  state.statsBusyVisible = false;
+  state.statsBusyTimer = 0;
   state.loading = true;
   state.contentError = "";
   render();
-  const [navigationResult, statsResult] = await Promise.allSettled([loadNavigation(), loadStats()]);
+  const [navigationResult, statsResult] = await Promise.allSettled([loadNavigation(), loadStats(statsRequestId)]);
   if (navigationResult.status === "rejected") {
     state.contentError = navigationResult.reason?.message || "无法加载项目和分类";
   }
-  if (statsResult.status === "rejected") {
+  if (statsResult.status === "rejected" && statsRequestId === state.statsRequestId) {
     state.stats = emptyStats(statsResult.reason?.message || "无法加载统计数据");
   }
   state.loading = false;
@@ -110,10 +123,12 @@ async function loadNavigation() {
   state.links = sortLinks(array(payload.links), state.categories);
 }
 
-async function loadStats() {
+async function loadStats(requestId = state.statsRequestId, signal) {
   const query = new URLSearchParams({ from: state.statsFrom, to: state.statsTo, granularity: state.statsGranularity });
-  const payload = await api(`/admin/stats?${query.toString()}`);
+  const payload = await api(`/admin/stats?${query.toString()}`, signal ? { signal } : {});
+  if (requestId !== state.statsRequestId) return false;
   state.stats = normalizeStats(payload);
+  return true;
 }
 
 function render() {
@@ -216,9 +231,10 @@ function renderDashboard() {
   const categoryRows = state.stats.categories.slice(0, 6);
   const projectRows = state.stats.projects.slice(0, 6);
   const sourceRows = state.stats.recent.slice(0, 5);
-  return `${renderPageHeading("数据概览", "先看整体访问，再进入趋势、来源或项目点击明细。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
-    ${renderContentError()}
+  return `${renderPageHeading("数据概览", "先看整体访问，再进入趋势、来源或项目点击明细。", `<button class="secondary-button" type="button" data-action="refresh-stats"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
     ${renderStatsToolbar()}
+    <div class="stats-results" data-stats-results aria-busy="false">
+    ${renderContentError()}
     ${renderMetricGrid([
       ["pine", "独立访客（按 IP）", overview.uniqueVisitors, "按 IP 去重，不等同于真实用户数"],
       ["blue", "访问次数", overview.events, `统计区间：${rangeLabel}`],
@@ -245,15 +261,17 @@ function renderDashboard() {
         <div class="panel-header"><div><h2 class="panel-title">访问来源</h2><p class="panel-caption">已按脱敏 IP 汇总，次数代表该来源在区间内的访问次数。</p></div><div class="panel-header-actions"><span class="panel-summary">共 ${formatNumber(state.stats.sourceCount)} 个来源</span><button class="quiet-button panel-link" type="button" data-action="navigate" data-view="analytics-sources">查看全部 <i data-lucide="arrow-up-right" aria-hidden="true"></i></button></div></div>
         <div class="panel-body">${renderSourceSummary(sourceRows)}</div>
       </article>
-    </section>`;
+    </section>
+    </div>`;
 }
 
 function renderAnalyticsTrend() {
   const overview = state.stats.overview;
   const rangeLabel = statsRangeLabel();
-  return `${renderPageHeading("访问趋势", "按时间粒度观察前台访问次数变化，定位高峰和低谷。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
-    ${renderContentError()}
+  return `${renderPageHeading("访问趋势", "按时间粒度观察前台访问次数变化，定位高峰和低谷。", `<button class="secondary-button" type="button" data-action="refresh-stats"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
     ${renderStatsToolbar()}
+    <div class="stats-results" data-stats-results aria-busy="false">
+    ${renderContentError()}
     ${renderMetricGrid([
       ["pine", "访问次数", overview.events, `统计区间：${rangeLabel}`],
       ["blue", "独立访客（按 IP）", overview.uniqueVisitors, "按 IP 去重，不等同于真实用户数"],
@@ -273,7 +291,8 @@ function renderAnalyticsTrend() {
         <div class="panel-header"><div><h2 class="panel-title">项目点击结构</h2><p class="panel-caption">按教程点击次数排序</p></div></div>
         <div class="panel-body">${renderProjectStats(state.stats.projects.slice(0, 8))}</div>
       </article>
-    </section>`;
+    </section>
+    </div>`;
 }
 
 function renderAnalyticsSources() {
@@ -288,9 +307,10 @@ function renderAnalyticsSources() {
     return new Date(candidate).getTime() > new Date(current).getTime() ? candidate : current;
   }, "") || "--";
   const sourceDisplayNote = sourceCount > rows.length ? `当前展示访问次数最高的 ${formatNumber(rows.length)} 个来源` : "访问次数按当前筛选区间汇总";
-  return `${renderPageHeading("访问来源", "查看已脱敏的访客 IP、访问次数与活跃时间，便于识别来源质量。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
-    ${renderContentError()}
+  return `${renderPageHeading("访问来源", "查看已脱敏的访客 IP、访问次数与活跃时间，便于识别来源质量。", `<button class="secondary-button" type="button" data-action="refresh-stats"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
     ${renderStatsToolbar()}
+    <div class="stats-results" data-stats-results aria-busy="false">
+    ${renderContentError()}
     ${renderMetricGrid([
       ["pine", "脱敏来源数", sourceCount, "当前区间内的 IP 来源"],
       ["blue", "访问次数", overview.events, "所有来源合计"],
@@ -300,7 +320,8 @@ function renderAnalyticsSources() {
     <article class="panel sources-panel">
       <div class="panel-header"><div><h2 class="panel-title">IP 来源明细</h2><p class="panel-caption">IP 已脱敏展示；${escapeHtml(sourceDisplayNote)}。</p></div><span class="panel-summary">共 ${formatNumber(sourceCount)} 个来源</span></div>
       <div class="panel-body">${renderRecentStats(rows)}</div>
-    </article>`;
+    </article>
+    </div>`;
 }
 
 function renderAnalyticsProjects() {
@@ -309,9 +330,10 @@ function renderAnalyticsProjects() {
   const top = rows[0];
   const topTitle = top?.linkTitle || top?.title || "--";
   const average = rows.length ? overview.linkClicks / rows.length : 0;
-  return `${renderPageHeading("项目点击", "按项目查看教程入口点击次数，帮助你判断哪些内容最值得持续维护。", `<button class="secondary-button" type="button" data-action="refresh-workspace"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
-    ${renderContentError()}
+  return `${renderPageHeading("项目点击", "按项目查看教程入口点击次数，帮助你判断哪些内容最值得持续维护。", `<button class="secondary-button" type="button" data-action="refresh-stats"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
     ${renderStatsToolbar()}
+    <div class="stats-results" data-stats-results aria-busy="false">
+    ${renderContentError()}
     ${renderMetricGrid([
       ["pine", "项目点击次数", overview.linkClicks, "当前区间内的教程点击"],
       ["blue", "有点击项目", rows.length, "至少产生 1 次点击的项目"],
@@ -321,7 +343,8 @@ function renderAnalyticsProjects() {
     <article class="panel project-stats-panel">
       <div class="panel-header"><div><h2 class="panel-title">项目点击明细</h2><p class="panel-caption">按点击次数从高到低排列。</p></div><span class="panel-summary">共 ${formatNumber(rows.length)} 个项目</span></div>
       <div class="panel-body">${renderProjectRanking(rows)}</div>
-    </article>`;
+    </article>
+    </div>`;
 }
 
 function renderMetricGrid(items) {
@@ -331,15 +354,96 @@ function renderMetricGrid(items) {
 function renderStatsToolbar() {
   const presets = [["today", "今天"], ["7d", "近 7 天"], ["30d", "近 30 天"], ["90d", "近 90 天"]];
   const granularity = state.statsGranularity === "day" ? "day" : "hour";
-  return `<section class="stats-toolbar" aria-label="统计筛选">
-    <div class="range-presets" role="group" aria-label="常用时间范围">${presets.map(([value, label]) => `<button class="range-preset ${state.statsPreset === value ? "active" : ""}" type="button" data-action="set-stats-range" data-range="${value}">${label}</button>`).join("")}<span class="range-current">${escapeHtml(statsRangeLabel())}</span></div>
+  const today = dateInputValue(new Date());
+  const loading = state.statsLoading;
+  const busy = loading && state.statsBusyVisible;
+  const shellClass = busy ? " is-loading" : loading ? " is-pending" : "";
+  const disabled = loading ? " disabled" : "";
+  return `<section class="stats-toolbar${shellClass}" data-stats-toolbar aria-label="统计筛选" aria-busy="${loading ? "true" : "false"}">
+    <div class="range-presets" role="group" aria-label="常用时间范围">${presets.map(([value, label]) => `<button class="range-preset ${state.statsPreset === value ? "active" : ""}" type="button" data-action="set-stats-range" data-range="${value}" aria-pressed="${state.statsPreset === value ? "true" : "false"}"${disabled}>${label}</button>`).join("")}<span class="range-current" data-stats-range-label>${escapeHtml(statsRangeLabel())}</span><span class="stats-status" data-stats-status role="status" aria-live="polite"${busy ? "" : " hidden"}><i data-lucide="refresh-cw" aria-hidden="true"></i><span>正在更新统计</span></span></div>
     <form class="range-control" data-form="stats-filter">
-      <label class="range-field"><span>开始日期</span><input class="date-input" name="from" type="date" value="${escapeAttribute(state.statsFrom)}" required /></label>
-      <label class="range-field"><span>结束日期</span><input class="date-input" name="to" type="date" value="${escapeAttribute(state.statsTo)}" required /></label>
-      <label class="range-field"><span>统计粒度</span><select class="date-input granularity-select" name="granularity"><option value="hour" ${granularity === "hour" ? "selected" : ""}>按小时</option><option value="day" ${granularity === "day" ? "selected" : ""}>按天</option></select></label>
-      <button class="secondary-button" type="submit"><i data-lucide="filter" aria-hidden="true"></i><span>应用筛选</span></button>
+      <label class="range-field"><span>开始日期</span><input class="date-input" name="from" type="date" value="${escapeAttribute(state.statsFrom)}" max="${escapeAttribute(today)}" required${disabled} /></label>
+      <label class="range-field"><span>结束日期</span><input class="date-input" name="to" type="date" value="${escapeAttribute(state.statsTo)}" max="${escapeAttribute(today)}" required${disabled} /></label>
+      <label class="range-field"><span>统计粒度</span><select class="date-input granularity-select" name="granularity"${disabled}><option value="hour" ${granularity === "hour" ? "selected" : ""}>按小时</option><option value="day" ${granularity === "day" ? "selected" : ""}>按天</option></select></label>
+      <button class="secondary-button stats-submit" data-role="stats-submit" type="submit" aria-busy="${loading ? "true" : "false"}"${disabled}><i class="stats-submit-icon${busy ? " is-spinning" : ""}" data-lucide="filter" aria-hidden="true"></i><span data-stats-submit-label>${busy ? "更新中…" : "应用筛选"}</span></button>
     </form>
   </section>`;
+}
+
+function syncStatsToolbar() {
+  const toolbar = document.querySelector("[data-stats-toolbar]");
+  const loading = state.statsLoading;
+  const busy = loading && state.statsBusyVisible;
+  if (!toolbar) {
+    syncStatsResultsBusy();
+    syncStatsRefreshButtons();
+    return;
+  }
+  toolbar.classList.toggle("is-loading", busy);
+  toolbar.classList.toggle("is-pending", loading && !busy);
+  toolbar.setAttribute("aria-busy", loading ? "true" : "false");
+  toolbar.querySelectorAll(".range-preset").forEach((button) => {
+    const active = button.dataset.range === state.statsPreset;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.disabled = loading;
+  });
+  const rangeLabel = toolbar.querySelector("[data-stats-range-label]");
+  if (rangeLabel) rangeLabel.textContent = statsRangeLabel();
+  const from = toolbar.querySelector("[name='from']");
+  const to = toolbar.querySelector("[name='to']");
+  const granularity = toolbar.querySelector("[name='granularity']");
+  if (from && from.value !== state.statsFrom) from.value = state.statsFrom;
+  if (to && to.value !== state.statsTo) to.value = state.statsTo;
+  if (granularity && granularity.value !== state.statsGranularity) granularity.value = state.statsGranularity;
+  toolbar.querySelectorAll(".range-field input, .range-field select").forEach((control) => { control.disabled = loading; });
+  const status = toolbar.querySelector("[data-stats-status]");
+  if (status) status.hidden = !busy;
+  const submit = toolbar.querySelector("[data-role='stats-submit']");
+  if (submit) {
+    submit.disabled = loading;
+    submit.setAttribute("aria-busy", loading ? "true" : "false");
+  }
+  const submitIcon = toolbar.querySelector(".stats-submit-icon");
+  if (submitIcon) submitIcon.classList.toggle("is-spinning", busy);
+  const submitLabel = toolbar.querySelector("[data-stats-submit-label]");
+  if (submitLabel) submitLabel.textContent = busy ? "更新中…" : "应用筛选";
+  syncStatsResultsBusy();
+  syncStatsRefreshButtons();
+}
+
+function syncStatsRefreshButtons() {
+  document.querySelectorAll("[data-action='refresh-stats']").forEach((button) => {
+    button.disabled = state.statsLoading;
+    button.setAttribute("aria-busy", state.statsLoading ? "true" : "false");
+    button.classList.toggle("is-loading", state.statsLoading);
+  });
+}
+
+function syncStatsResultsBusy() {
+  const results = document.querySelector("[data-stats-results]");
+  if (results) results.setAttribute("aria-busy", state.statsLoading ? "true" : "false");
+}
+
+function renderStatsResultsOnly() {
+  const results = document.querySelector("[data-stats-results]");
+  if (!results) {
+    if (state.loading || !state.session) render();
+    return;
+  }
+  if (state.loading || !state.session) {
+    render();
+    return;
+  }
+  const template = document.createElement("template");
+  template.innerHTML = renderPage().trim();
+  const nextResults = template.content.querySelector("[data-stats-results]");
+  if (!nextResults) {
+    return;
+  }
+  results.innerHTML = nextResults.innerHTML;
+  results.setAttribute("aria-busy", "false");
+  refreshIcons(results);
 }
 
 function renderMetric(tone, label, value, note) {
@@ -581,11 +685,23 @@ async function handleClick(event) {
       render();
       return;
     }
-    if (action === "set-stats-range") return updateStatsPreset(button.dataset.range || "7d");
+    if (action === "set-stats-range") {
+      await updateStatsPreset(button.dataset.range || "7d");
+      return;
+    }
     if (action === "toggle-theme") return toggleTheme();
-    if (action === "logout") return logout();
-    if (action === "refresh-workspace") return loadWorkspace();
-    if (action === "refresh-navigation") return refreshNavigation();
+    if (action === "logout") {
+      await logout();
+      return;
+    }
+    if (action === "refresh-stats") {
+      await refreshStats();
+      return;
+    }
+    if (action === "refresh-navigation") {
+      await refreshNavigation();
+      return;
+    }
     if (action === "new-project") return openProjectEditor();
     if (action === "new-category") return openCategoryEditor();
     if (action === "clear-cover") {
@@ -635,7 +751,7 @@ async function handleSubmit(event) {
   } catch (error) {
     handleActionError(error);
   } finally {
-    if (submitter?.isConnected) submitter.disabled = false;
+    if (submitter?.isConnected) submitter.disabled = form.dataset.form === "stats-filter" ? state.statsLoading : false;
   }
 }
 
@@ -679,6 +795,8 @@ async function login(form) {
 
 async function logout() {
   try { await api("/auth/logout", { method: "POST" }); } catch (error) { if (error.status !== 401) throw error; }
+  cancelStatsRequest();
+  state.statsRequestId += 1;
   state.session = null;
   state.modal = null;
   state.contentError = "";
@@ -686,6 +804,7 @@ async function logout() {
 }
 
 async function updateStatsFilter(form) {
+  if (state.statsLoading) return;
   const data = new FormData(form);
   const from = String(data.get("from") || "");
   const to = String(data.get("to") || "");
@@ -694,17 +813,11 @@ async function updateStatsFilter(form) {
   state.statsTo = to;
   state.statsPreset = "custom";
   state.statsGranularity = String(data.get("granularity") || "hour") === "day" ? "day" : "hour";
-  state.loading = true;
-  render();
-  try {
-    await loadStats();
-  } finally {
-    state.loading = false;
-    render();
-  }
+  await refreshStats();
 }
 
 async function updateStatsPreset(preset) {
+  if (state.statsLoading) return;
   const ranges = {
     today: { days: 1, granularity: "hour" },
     "7d": { days: 7, granularity: "hour" },
@@ -720,15 +833,60 @@ async function updateStatsPreset(preset) {
   state.statsTo = dateInputValue(end);
   state.statsPreset = preset in ranges ? preset : "7d";
   state.statsGranularity = selected.granularity;
-  state.loading = true;
+  await refreshStats();
+}
+
+async function refreshStats() {
+  if (!state.session || state.statsLoading) return;
+  const requestId = ++state.statsRequestId;
+  state.statsLoading = true;
+  state.statsBusyVisible = false;
   state.contentError = "";
-  render();
+  const controller = new AbortController();
+  state.statsAbortController = controller;
+  let timedOut = false;
+  syncStatsToolbar();
+  state.statsBusyTimer = window.setTimeout(() => {
+    if (requestId !== state.statsRequestId || !state.statsLoading) return;
+    state.statsBusyVisible = true;
+    syncStatsToolbar();
+  }, 220);
+  state.statsTimeoutTimer = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 15000);
   try {
-    await loadStats();
+    await loadStats(requestId, controller.signal);
+  } catch (error) {
+    if (requestId !== state.statsRequestId) return;
+    if (requestId === state.statsRequestId) {
+      state.contentError = error?.name === "AbortError" && timedOut ? "统计数据请求超时，请稍后重试" : (error.message || "无法加载统计数据");
+    }
+    const normalizedError = error?.name === "AbortError" && timedOut ? Object.assign(new Error("统计数据请求超时，请稍后重试"), { status: 408 }) : error;
+    throw normalizedError;
   } finally {
-    state.loading = false;
-    render();
+    if (requestId !== state.statsRequestId) return;
+    if (state.statsBusyTimer) window.clearTimeout(state.statsBusyTimer);
+    if (state.statsTimeoutTimer) window.clearTimeout(state.statsTimeoutTimer);
+    state.statsBusyTimer = 0;
+    state.statsTimeoutTimer = 0;
+    if (state.statsAbortController === controller) state.statsAbortController = null;
+    state.statsLoading = false;
+    state.statsBusyVisible = false;
+    syncStatsToolbar();
+    renderStatsResultsOnly();
   }
+}
+
+function cancelStatsRequest() {
+  if (state.statsBusyTimer) window.clearTimeout(state.statsBusyTimer);
+  if (state.statsTimeoutTimer) window.clearTimeout(state.statsTimeoutTimer);
+  if (state.statsAbortController) state.statsAbortController.abort();
+  state.statsBusyTimer = 0;
+  state.statsTimeoutTimer = 0;
+  state.statsAbortController = null;
+  state.statsLoading = false;
+  state.statsBusyVisible = false;
 }
 
 function updateProjectFilter(form) {
@@ -1056,8 +1214,8 @@ function escapeHtml(value) {
 
 function escapeAttribute(value) { return escapeHtml(value).replace(/`/g, "&#096;"); }
 
-function refreshIcons() {
-  window.lucide?.createIcons?.({ attrs: { "stroke-width": 1.8 } });
+function refreshIcons(root = document) {
+  window.lucide?.createIcons?.({ root, attrs: { "stroke-width": 1.8 } });
 }
 
 function showToast(message, type = "success") {

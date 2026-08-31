@@ -934,7 +934,7 @@ function handleAdminStats(req, res, searchParams) {
     const rawIpSources = db.prepare(`SELECT ip, COUNT(*) AS events,
       MIN(created_at) AS firstSeenAt, MAX(created_at) AS lastSeenAt
       FROM analytics_events WHERE ${where}
-      GROUP BY ip ORDER BY events DESC, lastSeenAt DESC`).all(...params);
+      GROUP BY ip`).all(...params);
     const ipSourceMap = new Map();
     rawIpSources.forEach((item) => {
       const source = maskIpAddress(item.ip);

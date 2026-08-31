@@ -53,8 +53,9 @@
     return element;
   }
 
-  function createIcons({ attrs = {} } = {}) {
-    document.querySelectorAll("[data-lucide]").forEach((placeholder) => {
+  function createIcons({ attrs = {}, root = document } = {}) {
+    const scope = root && typeof root.querySelectorAll === "function" ? root : document;
+    scope.querySelectorAll("[data-lucide]:not(svg)").forEach((placeholder) => {
       const name = placeholder.getAttribute("data-lucide");
       const children = icons[name];
       if (!children) return;
