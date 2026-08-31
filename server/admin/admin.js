@@ -172,6 +172,7 @@ function renderShell() {
       </header>
       <div class="page-content">${content}</div>
     </main>
+    <div class="admin-gutter" aria-hidden="true"></div>
   </div>${renderModal()}`;
 }
 
