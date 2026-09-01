@@ -209,7 +209,7 @@ function renderMarkdownInline(value, preserveBreaks = false) {
   while ((match = tokenPattern.exec(source))) {
     output += escapeHtml(source.slice(cursor, match.index));
     if (match[1] !== undefined) {
-      const imageUrl = safeMarkdownUrl(match[2]);
+      const imageUrl = safeImageUrl(match[2]);
       output += imageUrl
         ? `<img class="markdown-image" src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(match[1] || "正文图片")}"${match[3] ? ` title="${escapeAttribute(match[3])}"` : ""} loading="lazy" decoding="async" />`
         : escapeHtml(match[1]);
@@ -233,6 +233,20 @@ function safeMarkdownUrl(value) {
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
   return "";
+}
+
+function safeImageUrl(value) {
+  const trimmed = String(value || "").trim();
+  const safe = safeMarkdownUrl(trimmed);
+  if (!safe) return "";
+  if (window.location.protocol === "https:" && /^http:\/\//i.test(safe)) return imageProxyUrl(safe);
+  return safe;
+}
+
+function imageProxyUrl(value) {
+  const base = String(API_BASE || "/api").replace(/\/$/, "");
+  if (/^http:/i.test(base)) return value;
+  return `${base}/public/image?url=${encodeURIComponent(value)}`;
 }
 
 function comparePosition(left, right) { return Number(left.position || 0) - Number(right.position || 0) || String(left.name || left.title).localeCompare(String(right.name || right.title), "zh-CN"); }
@@ -306,10 +320,11 @@ function openDialog(id, trigger = null) {
   const link = navigationData.links.find((item) => item.id === id); if (!link) return;
   lastTrigger = trigger || document.activeElement;
   const detailDescription = link.detailDescription || link.description || "";
-  const cover = escapeAttribute(escapeCssUrl(link.cover || fallbackCover(link.tone)));
   const guide = link.guide || legacyStepsToMarkdown(link.steps);
   const markdown = renderMarkdown(guide) || "<p class=\"markdown-empty\">暂无正文，请打开项目入口查看最新说明。</p>";
-  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-hero tone-${escapeAttribute(link.tone || "teal")}" style="--cover: url('${cover}')"><span class="project-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-copy"><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(detailDescription)}</p><div class="markdown-heading"><span>教程正文</span><span>Markdown</span></div><div class="markdown-body">${markdown}</div>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}<a class="dialog-cta" href="${escapeAttribute(normalizeUrl(link.url))}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a></div>`;
+  const entryUrl = normalizeUrl(link.url);
+  const entryCta = entryUrl ? `<a class="dialog-cta" href="${escapeAttribute(entryUrl)}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a>` : "";
+  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-copy"><div class="dialog-detail-meta"><span class="dialog-detail-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(detailDescription)}</p><div class="markdown-heading"><span>教程正文</span><span>Markdown</span></div><div class="markdown-body">${markdown}</div>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}${entryCta}</div>`;
   const dialog = document.querySelector("#project-dialog");
   dialog.showModal();
   document.querySelector("#close-dialog")?.focus();
@@ -348,7 +363,7 @@ function sendTrackingEvent(payload) {
   }).catch(() => {});
 }
 function fallbackCover(tone) { const palette = { orange: "#f59e0b", rose: "#e76f91", blue: "#3b82f6", lime: "#8bbd2f", yellow: "#d99b28", purple: "#8b5cf6", teal: "#159a91" }; return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 400'%3E%3Crect width='800' height='400' fill='${encodeURIComponent(palette[tone] || palette.teal)}'/%3E%3Cpath d='M0 300 170 130l120 120 170-170 340 320H0Z' fill='%230f172a' opacity='.22'/%3E%3C/svg%3E`; }
-function normalizeUrl(value) { const trimmed = String(value || "").trim(); return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`; }
+function normalizeUrl(value) { const trimmed = String(value || "").trim(); if (!trimmed) return ""; return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`; }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]); }
 function escapeAttribute(value) { return escapeHtml(value).replace(/`/g, "&#096;"); }
 function escapeCssUrl(value) { return String(value ?? "").replace(/[\\'"()\n\r]/g, (character) => ({ "\\": "\\\\", "'": "\\'", '"': '\\"', "(": "\\(", ")": "\\)", "\n": "", "\r": "" })[character]); }

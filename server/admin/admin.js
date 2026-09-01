@@ -26,6 +26,7 @@ const state = {
   dataNavExpanded: readStoredDataNavExpanded(),
   projectSearch: "",
   projectCategory: "all",
+  projectPreviewMode: "front",
   modal: null,
   loading: false,
   statsLoading: false,
@@ -141,7 +142,11 @@ function render() {
   app.innerHTML = state.session ? renderShell() : renderLogin();
   refreshIcons();
   if (state.modal?.type === "project") {
-    window.requestAnimationFrame(() => updateCoverPreview(document.querySelector("[data-control='project-cover']")?.value || ""));
+    window.requestAnimationFrame(() => {
+      const form = document.querySelector("form[data-form='project']");
+      updateCoverPreview(form?.querySelector("[data-control='project-cover']")?.value || "");
+      updateProjectLivePreview(form);
+    });
   }
 }
 
@@ -263,7 +268,7 @@ function renderDashboard() {
         <div class="panel-body">${renderProjectStats(projectRows)}</div>
       </article>
       <article class="panel span-two">
-        <div class="panel-header"><div><h2 class="panel-title">访问来源</h2><p class="panel-caption">已按脱敏 IP 汇总，次数代表该来源在区间内的访问次数。</p></div><div class="panel-header-actions"><span class="panel-summary">共 ${formatNumber(state.stats.sourceCount)} 个来源</span><button class="quiet-button panel-link" type="button" data-action="navigate" data-view="analytics-sources">查看全部 <i data-lucide="arrow-up-right" aria-hidden="true"></i></button></div></div>
+        <div class="panel-header"><div><h2 class="panel-title">访问来源</h2><p class="panel-caption">按完整 IP 汇总，次数代表该来源在区间内的访问次数。</p></div><div class="panel-header-actions"><span class="panel-summary">共 ${formatNumber(state.stats.sourceCount)} 个来源</span><button class="quiet-button panel-link" type="button" data-action="navigate" data-view="analytics-sources">查看全部 <i data-lucide="arrow-up-right" aria-hidden="true"></i></button></div></div>
         <div class="panel-body">${renderSourceSummary(sourceRows)}</div>
       </article>
     </section>
@@ -312,18 +317,18 @@ function renderAnalyticsSources() {
     return new Date(candidate).getTime() > new Date(current).getTime() ? candidate : current;
   }, "") || "--";
   const sourceDisplayNote = sourceCount > rows.length ? `当前展示访问次数最高的 ${formatNumber(rows.length)} 个来源` : "访问次数按当前筛选区间汇总";
-  return `${renderPageHeading("访问来源", "查看已脱敏的访客 IP、访问次数与活跃时间，便于识别来源质量。", `<button class="secondary-button" type="button" data-action="refresh-stats"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
+  return `${renderPageHeading("访问来源", "查看访客完整 IP、访问次数与活跃时间，便于识别来源质量。", `<button class="secondary-button" type="button" data-action="refresh-stats"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>刷新数据</span></button>`)}
     ${renderStatsToolbar()}
     <div class="stats-results" data-stats-results aria-busy="false">
     ${renderContentError()}
     ${renderMetricGrid([
-      ["pine", "脱敏来源数", sourceCount, "当前区间内的 IP 来源"],
+      ["pine", "来源数", sourceCount, "当前区间内的 IP 来源"],
       ["blue", "访问次数", overview.events, "所有来源合计"],
-      ["amber", "平均每来源", formatDecimal(average), "访问次数 ÷ 脱敏来源数"],
+      ["amber", "平均每来源", formatDecimal(average), "访问次数 ÷ 来源数"],
       ["coral", "最近活跃", formatDateTime(latest), "来源列表中的最新访问"],
     ])}
     <article class="panel sources-panel">
-      <div class="panel-header"><div><h2 class="panel-title">IP 来源明细</h2><p class="panel-caption">IP 已脱敏展示；${escapeHtml(sourceDisplayNote)}。</p></div><span class="panel-summary">共 ${formatNumber(sourceCount)} 个来源</span></div>
+      <div class="panel-header"><div><h2 class="panel-title">IP 来源明细</h2><p class="panel-caption">IP 按完整地址展示；${escapeHtml(sourceDisplayNote)}。</p></div><span class="panel-summary">共 ${formatNumber(sourceCount)} 个来源</span></div>
       <div class="panel-body">${renderRecentStats(rows)}</div>
     </article>
     </div>`;
@@ -504,7 +509,7 @@ function renderSourceSummary(rows) {
 
 function renderRecentStats(rows) {
   if (!rows.length) return renderEmptyTable("当前时段还没有可展示的访问来源");
-  return `<div class="data-table-wrap"><table class="data-table source-table"><thead><tr><th>IP 来源（已脱敏）</th><th class="numeric">访问次数</th><th>首次访问</th><th>最近访问</th></tr></thead><tbody>${rows.map((row) => {
+  return `<div class="data-table-wrap"><table class="data-table source-table"><thead><tr><th>IP 来源</th><th class="numeric">访问次数</th><th>首次访问</th><th>最近访问</th></tr></thead><tbody>${rows.map((row) => {
     const source = row.source || row.ip || row.ipSource || row.address || "未记录";
     const firstSeen = row.firstSeenAt || row.createdAt || row.timestamp || row.time || "--";
     const lastSeen = row.lastSeenAt || row.createdAt || row.timestamp || row.time || "--";
@@ -619,16 +624,18 @@ function renderProjectModal(link) {
   const cover = link.cover || link.image || "";
   const mark = link.mark || nextMark();
   const guide = String(link.guide || "").trim() || stepsToText(link.steps);
-  return `<div class="modal-backdrop editor-backdrop" data-action="modal-backdrop"><section class="modal editor-drawer" role="dialog" aria-modal="true" aria-labelledby="project-editor-title">
-    <header class="modal-header editor-header"><div><span class="editor-kicker">项目教程</span><h2 id="project-editor-title">${existing ? "编辑项目教程" : "新建项目教程"}</h2><p>保存后，内容会同步到前台项目索引。</p></div><button class="icon-button modal-close" type="button" data-action="close-modal" title="关闭编辑器" aria-label="关闭编辑器"><i data-lucide="x" aria-hidden="true"></i></button></header>
+  return `<div class="modal-backdrop editor-backdrop" data-action="modal-backdrop"><section class="modal editor-drawer editor-workbench" role="dialog" aria-modal="true" aria-labelledby="project-editor-title">
+    <header class="modal-header editor-header"><div><span class="editor-kicker">项目教程</span><h2 id="project-editor-title">${existing ? "编辑项目教程" : "新建项目教程"}</h2><p>右侧编辑，左侧实时查看未保存的卡片和详情效果。</p></div><button class="icon-button modal-close" type="button" data-action="close-modal" title="关闭编辑器" aria-label="关闭编辑器"><i data-lucide="x" aria-hidden="true"></i></button></header>
+    <div class="editor-workbench-body">
+      <aside class="editor-preview-pane" aria-label="项目成品预览"><div class="editor-preview-heading"><div><span class="editor-kicker">LIVE PREVIEW</span><h3>成品预览</h3></div><span class="editor-preview-state">未保存</span></div><div class="editor-preview-tabs" role="tablist" aria-label="预览页面"><button class="editor-preview-tab${state.projectPreviewMode === "front" ? " active" : ""}" type="button" role="tab" aria-selected="${state.projectPreviewMode === "front" ? "true" : "false"}" data-action="set-project-preview" data-preview-mode="front">卡片前方</button><button class="editor-preview-tab${state.projectPreviewMode === "back" ? " active" : ""}" type="button" role="tab" aria-selected="${state.projectPreviewMode === "back" ? "true" : "false"}" data-action="set-project-preview" data-preview-mode="back">卡片后方</button></div><div id="project-live-preview-content" class="editor-live-preview" role="tabpanel" aria-live="polite">${renderProjectPreviewContent(link, state.projectPreviewMode)}</div><p class="editor-preview-note">预览会随右侧输入即时更新，保存后才会同步到前台。</p></aside>
     <form class="editor-form editor-project-form" data-form="project">
       <div class="editor-scroll">
         <section class="editor-section editor-section--front" aria-labelledby="project-front-title"><div class="editor-section-heading"><div><span class="editor-section-kicker">未点击卡片</span><h3 id="project-front-title" class="editor-section-title">卡片前方</h3><p>用户在首页还没有点击卡片时，直接看到的内容。</p></div><span class="editor-section-chip">首页卡片</span></div>
           <div class="form-grid">
-            <div class="field field--category"><label for="project-category">所属分类</label><select id="project-category" name="category" required ${noCategories ? "disabled" : ""}>${categoryOptions}</select><p class="field-help">首页分类标题和详情顶部分类标识都使用这里的值。</p>${noCategories ? `<p class="field-help">请先创建一个分类。</p>` : ""}</div>
+            <div class="field field--category"><label for="project-category">所属分类</label><select id="project-category" name="category" data-control="project-category" required ${noCategories ? "disabled" : ""}>${categoryOptions}</select><p class="field-help">首页分类标题和详情顶部分类标识都使用这里的值。</p>${noCategories ? `<p class="field-help">请先创建一个分类。</p>` : ""}</div>
             <div class="field field--title"><label for="project-title">项目标题</label><input id="project-title" name="title" maxlength="80" value="${escapeAttribute(link.title || "")}" placeholder="例如：奶茶首单优惠" required /><p class="field-help">同时显示在首页卡片和点击后的详情标题。</p></div>
-            <div class="field field--status"><label for="project-status">状态文案</label><input id="project-status" name="status" maxlength="24" value="${escapeAttribute(link.status || "待核实")}" placeholder="例如：实测可用" required /><p class="field-help">显示在卡片前方顶部，也会显示在详情封面上。</p></div>
-            <div class="field field--mark"><label for="project-mark">卡片标记</label><input id="project-mark" name="mark" data-control="project-mark" maxlength="12" value="${escapeAttribute(mark)}" placeholder="例如：益" required /><p class="field-help">显示在首页卡片左侧；也会出现在点击后的详情封面上。</p></div>
+            <div class="field field--status"><label for="project-status">状态文案</label><input id="project-status" name="status" maxlength="24" value="${escapeAttribute(link.status || "待核实")}" placeholder="例如：实测可用" required /><p class="field-help">显示在卡片前方顶部，也会显示在详情信息顶部。</p></div>
+            <div class="field field--mark"><label for="project-mark">卡片标记</label><input id="project-mark" name="mark" data-control="project-mark" maxlength="12" value="${escapeAttribute(mark)}" placeholder="例如：益" required /><p class="field-help">显示在首页卡片左侧，也会显示在详情信息顶部。</p></div>
             <div class="field wide field--description"><label for="project-description">卡片简介</label><textarea id="project-description" name="description" maxlength="240" placeholder="一句话说明这张卡片能帮用户做什么" required>${escapeHtml(link.description || "")}</textarea><p class="field-help">这是卡片前方的主简介；详情介绍留空时会自动沿用它。</p></div>
             <div class="field wide field--note"><label for="project-note">卡片说明</label><input id="project-note" name="note" maxlength="80" value="${escapeAttribute(link.note || "")}" placeholder="例如：准备时间 · 5 分钟" required /><p class="field-help">显示在首页卡片底部的补充信息，例如耗时、门槛或适用人群。</p></div>
           </div>
@@ -647,15 +654,133 @@ function renderProjectModal(link) {
 
 > 注意事项
 ">${escapeHtml(guide)}</textarea><p class="field-help">支持标题、粗体、列表、链接、图片和代码块；不需要拆分成固定步骤。</p></div>
-          <div class="field wide field--cover"><label for="project-cover">封面图 URL</label><div class="cover-field-layout"><div><div class="cover-input-row"><input id="project-cover" name="cover" data-control="project-cover" maxlength="2048" value="${escapeAttribute(cover)}" placeholder="https://example.com/cover.jpg 或 /images/cover.jpg" /><button class="icon-button cover-clear" type="button" data-action="clear-cover" title="清除封面链接" aria-label="清除封面链接" ${cover ? "" : "disabled"}><i data-lucide="x" aria-hidden="true"></i></button></div><p class="field-help">卡片后方顶部的封面；支持 http、https 或站内路径，留空则使用卡片标记。</p></div><div id="project-cover-preview" class="project-cover-preview" data-mark="${escapeAttribute(mark)}" aria-live="polite"><span class="cover-preview-mark">${escapeHtml(mark)}</span><span class="cover-preview-copy">${cover ? "正在加载预览" : "未设置封面"}</span></div></div></div>
+          <div class="field wide field--cover"><label for="project-cover">封面图 URL</label><div class="cover-field-layout"><div><div class="cover-input-row"><input id="project-cover" name="cover" data-control="project-cover" maxlength="2048" value="${escapeAttribute(cover)}" placeholder="https://example.com/cover.jpg 或 /images/cover.jpg" /><button class="icon-button cover-clear" type="button" data-action="clear-cover" title="清除封面链接" aria-label="清除封面链接" ${cover ? "" : "disabled"}><i data-lucide="x" aria-hidden="true"></i></button></div><p class="field-help">仅用于后台列表和编辑预览的封面素材；支持 http、https 或站内路径。前台详情顶部不显示横幅封面。</p></div><div id="project-cover-preview" class="project-cover-preview" data-mark="${escapeAttribute(mark)}" aria-live="polite"><span class="cover-preview-mark">${escapeHtml(mark)}</span><span class="cover-preview-copy">${cover ? "正在加载预览" : "未设置封面"}</span></div></div></div>
           <div class="field wide field--tips"><label for="project-tips">小提示</label><textarea id="project-tips" name="tips" maxlength="2000" placeholder="提醒用户注意条件、时效或常见问题。">${escapeHtml(link.tips || "")}</textarea><p class="field-help">对应详情弹层底部的“小提示”区域。</p></div>
-          <div class="field wide field--url"><label for="project-url">入口 URL</label><input id="project-url" name="url" type="url" maxlength="2048" value="${escapeAttribute(link.url || "")}" placeholder="https://example.com" required /><p class="field-help">对应详情弹层底部的“打开项目入口”按钮。</p></div>
+          <div class="field wide field--url"><label for="project-url">入口 URL</label><input id="project-url" name="url" type="url" maxlength="2048" value="${escapeAttribute(link.url || "")}" placeholder="https://example.com" /><p class="field-help">可选；填写后对应详情弹层底部的“打开项目入口”按钮。</p></div>
         </div></section>
         <details class="editor-details"><summary><span><strong>视觉和内部信息</strong><small>设置卡片色调，或记录仅后台可见的备注。</small></span><i data-lucide="chevron-down" aria-hidden="true"></i></summary><div class="editor-details-body"><div class="form-grid"><div class="field wide"><span class="field-label">色调</span><div class="tone-options">${toneOptions}</div></div><div class="field wide"><label for="project-admin-note">后台备注</label><textarea id="project-admin-note" name="adminNote" maxlength="500" placeholder="仅后台可见，例如来源、复核日期或待补充内容。">${escapeHtml(link.adminNote || "")}</textarea></div></div></div></details>
       </div>
       <footer class="form-footer editor-footer"><span class="form-footer-note">${existing ? "编辑会保留原排序位置。" : "新教程会添加到所属分类的末尾。"} 可见性请在项目教程列表左侧的胶囊按钮中切换。</span><div class="modal-actions"><button class="secondary-button" type="button" data-action="close-modal">取消</button><button class="primary-button" type="submit" ${noCategories ? "disabled" : ""}><span>保存教程</span><i data-lucide="check" aria-hidden="true"></i></button></div></footer>
     </form>
+    </div>
   </section></div>`;
+}
+
+function projectDraftFromForm(form) {
+  const data = new FormData(form);
+  return {
+    category: String(data.get("category") || "").trim(),
+    title: String(data.get("title") || "").trim(),
+    mark: String(data.get("mark") || "").trim(),
+    tone: String(data.get("tone") || "teal").trim(),
+    status: String(data.get("status") || "").trim(),
+    description: String(data.get("description") || "").trim(),
+    detailDescription: String(data.get("detailDescription") || "").trim(),
+    note: String(data.get("note") || "").trim(),
+    cover: String(data.get("cover") || "").trim(),
+    guide: String(data.get("guide") || ""),
+    tips: String(data.get("tips") || "").trim(),
+    url: String(data.get("url") || "").trim(),
+  };
+}
+
+function updateProjectLivePreview(form) {
+  const preview = document.querySelector("#project-live-preview-content");
+  if (!preview || !form) return;
+  preview.innerHTML = renderProjectPreviewContent(projectDraftFromForm(form), state.projectPreviewMode);
+  refreshIcons(preview);
+}
+
+function renderProjectPreviewContent(link, mode = "front") {
+  const tone = TONES.some(([value]) => value === link.tone) ? link.tone : "teal";
+  const category = link.category || "所属分类";
+  const title = link.title || "项目标题";
+  const mark = link.mark || "指";
+  const status = link.status || "状态文案";
+  const description = link.description || "卡片简介会显示在这里。";
+  const note = link.note || "卡片说明";
+  if (mode !== "back") {
+    return `<article class="preview-card tone-${escapeAttribute(tone)}"><div class="preview-card-topline"><span class="preview-status">${escapeHtml(status)}</span><span class="preview-card-number">01</span></div><div class="preview-card-identity"><span class="preview-mark">${escapeHtml(mark)}</span><h4>${escapeHtml(title)}<i data-lucide="arrow-up-right" aria-hidden="true"></i></h4></div><p class="preview-card-description">${escapeHtml(description)}</p><div class="preview-card-meta"><span>${escapeHtml(note)}</span><span>查看完整教程</span></div></article>`;
+  }
+  const detailDescription = link.detailDescription || description;
+  const guide = String(link.guide || "").trim();
+  const markdown = renderPreviewMarkdown(guide) || `<p class="preview-markdown-empty">正文 Markdown 预览会显示在这里。</p>`;
+  const tips = link.tips ? `<aside class="preview-tips"><i data-lucide="lightbulb" aria-hidden="true"></i><div><strong>小提示</strong><p>${escapeHtml(link.tips)}</p></div></aside>` : "";
+  const entry = normalizePreviewUrl(link.url) ? `<div class="preview-entry"><i data-lucide="external-link" aria-hidden="true"></i><span>打开项目入口</span></div>` : `<div class="preview-entry is-empty"><span>未设置入口 URL</span></div>`;
+  return `<article class="preview-detail"><div class="preview-detail-meta"><span class="preview-detail-mark">${escapeHtml(mark)}</span><span class="preview-status">${escapeHtml(status)}</span></div><p class="preview-detail-kicker">${escapeHtml(category)} / FIELD NOTE</p><h4 class="preview-detail-title">${escapeHtml(title)}</h4><p class="preview-detail-description">${escapeHtml(detailDescription)}</p><div class="preview-markdown-heading"><span>教程正文</span><span>Markdown</span></div><div class="preview-markdown">${markdown}</div>${tips}${entry}</article>`;
+}
+
+function renderPreviewMarkdown(value) {
+  const source = String(value || "").replace(/\r\n?/g, "\n").trim();
+  if (!source) return "";
+  const blocks = [];
+  let paragraph = [];
+  let listType = "";
+  let listItems = [];
+  let quoteLines = [];
+  let code = null;
+  const flushParagraph = () => { if (paragraph.length) { blocks.push(`<p>${renderPreviewMarkdownInline(paragraph.join("\n"), true)}</p>`); paragraph = []; } };
+  const flushList = () => { if (listItems.length) { blocks.push(`<${listType}>${listItems.map((item) => `<li>${renderPreviewMarkdownInline(item)}</li>`).join("")}</${listType}>`); listType = ""; listItems = []; } };
+  const flushQuote = () => { if (quoteLines.length) { blocks.push(`<blockquote>${renderPreviewMarkdown(quoteLines.join("\n"))}</blockquote>`); quoteLines = []; } };
+  const flushOpenBlocks = () => { flushParagraph(); flushList(); flushQuote(); };
+  for (const line of source.split("\n")) {
+    const fence = line.match(/^ {0,3}```\s*([A-Za-z0-9_-]*)\s*$/);
+    if (code) {
+      if (fence) { blocks.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`); code = null; } else code.push(line);
+      continue;
+    }
+    if (fence) { flushOpenBlocks(); code = []; continue; }
+    if (!line.trim()) { flushOpenBlocks(); continue; }
+    const heading = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (heading) { flushOpenBlocks(); const level = heading[1].length; blocks.push(`<h${level}>${renderPreviewMarkdownInline(heading[2])}</h${level}>`); continue; }
+    if (/^ {0,3}((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/.test(line)) { flushOpenBlocks(); blocks.push("<hr />"); continue; }
+    const quote = line.match(/^ {0,3}>\s?(.*)$/);
+    if (quote) { flushParagraph(); flushList(); quoteLines.push(quote[1]); continue; }
+    flushQuote();
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) { flushParagraph(); const nextType = unordered ? "ul" : "ol"; if (listType && listType !== nextType) flushList(); listType = nextType; listItems.push((unordered || ordered)[1]); continue; }
+    flushList(); paragraph.push(line);
+  }
+  if (code) blocks.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+  flushOpenBlocks();
+  return blocks.join("");
+}
+
+function renderPreviewMarkdownInline(value, preserveBreaks = false) {
+  const source = String(value || "");
+  const tokenPattern = /!\[([^\]]*)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|\[([^\]]+)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|\*([^*]+)\*|_([^_]+)_/g;
+  let output = "";
+  let cursor = 0;
+  let match;
+  while ((match = tokenPattern.exec(source))) {
+    output += escapeHtml(source.slice(cursor, match.index));
+    if (match[1] !== undefined) {
+      const imageUrl = safeImageUrl(match[2]);
+      output += imageUrl ? `<img class="preview-markdown-image" src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(match[1] || "正文图片")}" loading="lazy" decoding="async" />` : escapeHtml(match[1]);
+    } else if (match[4] !== undefined) {
+      const linkUrl = safePreviewUrl(match[5]);
+      output += linkUrl ? `<a href="${escapeAttribute(linkUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(match[4])}</a>` : escapeHtml(match[4]);
+    } else if (match[7] !== undefined) output += `<code>${escapeHtml(match[7])}</code>`;
+    else if (match[8] !== undefined || match[9] !== undefined) output += `<strong>${escapeHtml(match[8] || match[9])}</strong>`;
+    else if (match[10] !== undefined) output += `<del>${escapeHtml(match[10])}</del>`;
+    else output += `<em>${escapeHtml(match[11] || match[12])}</em>`;
+    cursor = tokenPattern.lastIndex;
+  }
+  output += escapeHtml(source.slice(cursor));
+  return preserveBreaks ? output.replace(/\n/g, "<br />") : output;
+}
+
+function safePreviewUrl(value) {
+  const text = String(value || "").trim();
+  if (/^https?:\/\//i.test(text)) return text;
+  if (text.startsWith("/") && !text.startsWith("//")) return text;
+  return "";
+}
+
+function normalizePreviewUrl(value) {
+  const text = String(value || "").trim();
+  return /^https?:\/\//i.test(text) ? text : "";
 }
 
 function renderCategoryModal(category) {
@@ -741,7 +866,18 @@ async function handleClick(event) {
       if (!cover) return;
       cover.value = "";
       updateCoverPreview("");
+      updateProjectLivePreview(cover.form);
       cover.focus();
+      return;
+    }
+    if (action === "set-project-preview") {
+      state.projectPreviewMode = button.dataset.previewMode === "back" ? "back" : "front";
+      document.querySelectorAll(".editor-preview-tab").forEach((tab) => {
+        const active = tab.dataset.previewMode === state.projectPreviewMode;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      updateProjectLivePreview(document.querySelector("form[data-form='project']"));
       return;
     }
     if (action === "close-modal" || action === "modal-backdrop") {
@@ -789,14 +925,14 @@ async function handleSubmit(event) {
 
 function handleChange(event) {
   const control = event.target;
-  if (control.matches("[data-control='project-category']")) {
-    state.projectCategory = control.value;
-    render();
-  }
+  const projectForm = control.closest("form[data-form='project']");
+  if (projectForm) updateProjectLivePreview(projectForm);
 }
 
 function handleInput(event) {
   const control = event.target;
+  const projectForm = control.closest("form[data-form='project']");
+  if (projectForm) updateProjectLivePreview(projectForm);
   if (control.matches("[data-control='project-cover']")) {
     updateCoverPreview(control.value);
     return;
@@ -935,6 +1071,7 @@ function updateProjectFilter(form) {
 
 function openProjectEditor(link = null) {
   const defaultCategory = state.categories[0]?.name || "";
+  state.projectPreviewMode = "front";
   state.modal = { type: "project", entity: link ? { ...link } : { category: defaultCategory, title: "", mark: nextMark(), tone: "teal", status: "待核实", description: "", detailDescription: "", note: "", adminNote: "", cover: "", guide: "", tips: "", steps: [], url: "", enabled: true } };
   render();
 }
@@ -1244,8 +1381,18 @@ function safeImageUrl(value) {
   if (text.startsWith("/") && !text.startsWith("//")) return text;
   try {
     const parsed = new URL(text);
-    return ["http:", "https:"].includes(parsed.protocol) ? parsed.toString() : "";
+    if (!["http:", "https:"].includes(parsed.protocol)) return "";
+    const normalized = parsed.toString();
+    return window.location.protocol === "https:" && parsed.protocol === "http:"
+      ? imageProxyUrl(normalized)
+      : normalized;
   } catch { return ""; }
+}
+
+function imageProxyUrl(value) {
+  const base = String(API_BASE || "/api").replace(/\/$/, "");
+  if (/^http:/i.test(base)) return value;
+  return `${base}/public/image?url=${encodeURIComponent(value)}`;
 }
 
 function escapeHtml(value) {

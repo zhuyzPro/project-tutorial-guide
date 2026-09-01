@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const net = require("node:net");
+const dns = require("node:dns").promises;
 const { URL } = require("node:url");
 const { DatabaseSync } = require("node:sqlite");
 
@@ -68,6 +69,9 @@ const COOKIE_PATH = configuredCookiePath(process.env.COOKIE_PATH);
 const SESSION_TTL_MS = configuredSessionTtl(process.env.SESSION_TTL_MS);
 const SESSION_TTL_SECONDS = Math.floor(SESSION_TTL_MS / 1000);
 const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_IMAGE_PROXY_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_PROXY_REDIRECTS = 4;
+const IMAGE_PROXY_TIMEOUT_MS = 12_000;
 const MAX_LOGIN_ATTEMPT_RECORDS = 10_000;
 const MAX_SESSION_RECORDS = 10_000;
 const configuredAdminOrigins = [process.env.ADMIN_ORIGINS, process.env.ADMIN_ORIGIN]
@@ -460,6 +464,131 @@ function sendText(res, status, body, contentType = "text/plain; charset=utf-8") 
   res.end(body);
 }
 
+function isPrivateIpAddress(value) {
+  const normalized = String(value || "").toLowerCase().replace(/^\[|\]$/g, "").split("%")[0];
+  const version = net.isIP(normalized);
+  if (version === 4) {
+    const octets = normalized.split(".").map(Number);
+    const [first, second] = octets;
+    return first === 0 || first === 10 || first === 127 || first >= 224
+      || (first === 100 && second >= 64 && second <= 127)
+      || (first === 169 && second === 254)
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && (second === 0 || second === 168))
+      || (first === 198 && second >= 18 && second <= 19);
+  }
+  if (version === 6) {
+    return normalized === "::" || normalized === "::1"
+      || normalized.startsWith("fc") || normalized.startsWith("fd")
+      || /^(fe[89ab])/.test(normalized)
+      || (normalized.startsWith("::ffff:") && isPrivateIpAddress(normalized.slice(7)));
+  }
+  return false;
+}
+
+async function validateImageProxyTarget(value) {
+  const text = String(value || "").trim();
+  if (!text || text.length > 2_048) throw Object.assign(new Error("图片地址格式不正确"), { status: 400 });
+  let target;
+  try { target = new URL(text); } catch { throw Object.assign(new Error("图片地址格式不正确"), { status: 400 }); }
+  if (!["http:", "https:"].includes(target.protocol)) {
+    throw Object.assign(new Error("图片地址只能使用 http 或 https"), { status: 400 });
+  }
+  if (target.username || target.password) {
+    throw Object.assign(new Error("图片地址不能包含账号或密码"), { status: 400 });
+  }
+
+  const hostname = target.hostname.toLowerCase().replace(/\.$/, "");
+  if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "metadata.google.internal" || isPrivateIpAddress(hostname)) {
+    throw Object.assign(new Error("图片地址不允许访问本机或内网地址"), { status: 400 });
+  }
+  if (net.isIP(hostname) === 0) {
+    let addresses;
+    try {
+      addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+    } catch {
+      throw Object.assign(new Error("图片地址无法解析"), { status: 400 });
+    }
+    if (!addresses.length || addresses.some((entry) => isPrivateIpAddress(entry.address))) {
+      throw Object.assign(new Error("图片地址不允许访问本机或内网地址"), { status: 400 });
+    }
+  }
+  return target;
+}
+
+async function readLimitedResponseBody(response) {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_PROXY_BYTES) {
+    throw Object.assign(new Error("图片文件不能超过 8 MB"), { status: 413 });
+  }
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_IMAGE_PROXY_BYTES) {
+        await reader.cancel();
+        throw Object.assign(new Error("图片文件不能超过 8 MB"), { status: 413 });
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
+async function handlePublicImageProxy(req, res, searchParams) {
+  const rawUrl = searchParams.get("url");
+  let target;
+  let response;
+  try {
+    target = await validateImageProxyTarget(rawUrl);
+    for (let redirect = 0; redirect <= MAX_IMAGE_PROXY_REDIRECTS; redirect += 1) {
+      response = await fetch(target, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(IMAGE_PROXY_TIMEOUT_MS),
+        headers: {
+          Accept: "image/avif,image/webp,image/apng,image/*;q=0.9",
+          "User-Agent": "ZhuyzPro-ImageProxy/1.0",
+        },
+      });
+      if (response.status < 300 || response.status >= 400) break;
+      const location = response.headers.get("location");
+      response.body?.cancel();
+      if (!location || redirect === MAX_IMAGE_PROXY_REDIRECTS) {
+        throw Object.assign(new Error("图片地址重定向次数过多"), { status: 502 });
+      }
+      target = await validateImageProxyTarget(new URL(location, target).toString());
+    }
+
+    if (!response?.ok) throw Object.assign(new Error("图片源暂时无法访问"), { status: 502 });
+    const contentType = String(response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
+    if (!/^image\/(?:avif|bmp|gif|jpeg|jpg|png|svg\+xml|tiff|webp|x-icon|vnd\.microsoft\.icon)$/.test(contentType)) {
+      throw Object.assign(new Error("图片地址未返回可显示的图片"), { status: 415 });
+    }
+    const body = await readLimitedResponseBody(response);
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "Content-Length": body.length,
+      "Cache-Control": "public, max-age=86400",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+    });
+    return res.end(body);
+  } catch (error) {
+    if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+      return sendRequestError(res, Object.assign(new Error("图片加载超时，请稍后重试"), { status: 504 }));
+    }
+    if (error?.status) return sendRequestError(res, error);
+    return sendRequestError(res, Object.assign(new Error("图片源暂时无法访问"), { status: 502 }));
+  }
+}
+
 function sendRequestError(res, error) {
   const status = Number.isInteger(error?.status) && error.status >= 400 && error.status < 500 ? error.status : 500;
   if (status === 500) console.error(error);
@@ -693,11 +822,13 @@ function getCategoryNames() {
 
 function normalizeLink(input, existing = {}) {
   const category = textField(input.category ?? existing.category, "分类", { max: 40 });
-  const url = textField(input.url ?? existing.url, "地址", { max: 2048 });
-  let parsed;
-  try { parsed = new URL(url); } catch { throw Object.assign(new Error("地址格式不正确"), { status: 400 }); }
-  if (!["http:", "https:"].includes(parsed.protocol)) throw Object.assign(new Error("地址只能使用 http 或 https"), { status: 400 });
-  if (parsed.username || parsed.password) throw Object.assign(new Error("地址不能包含账号或密码"), { status: 400 });
+  const url = textField(input.url ?? existing.url ?? "", "地址", { required: false, max: 2048 });
+  let parsed = null;
+  if (url) {
+    try { parsed = new URL(url); } catch { throw Object.assign(new Error("地址格式不正确"), { status: 400 }); }
+    if (!["http:", "https:"].includes(parsed.protocol)) throw Object.assign(new Error("地址只能使用 http 或 https"), { status: 400 });
+    if (parsed.username || parsed.password) throw Object.assign(new Error("地址不能包含账号或密码"), { status: 400 });
+  }
   if (!getCategoryNames().has(category)) throw Object.assign(new Error("分类不存在，请先新增分类"), { status: 400 });
   const tone = textField(input.tone ?? existing.tone ?? "teal", "色调", { max: 12 });
   if (!TONES.has(tone)) throw Object.assign(new Error("色调不受支持"), { status: 400 });
@@ -723,7 +854,7 @@ function normalizeLink(input, existing = {}) {
     guide,
     steps,
     tips: textField(input.tips ?? existing.tips ?? "", "小提示", { required: false, max: 2_000 }),
-    url: parsed.toString(),
+    url: parsed ? parsed.toString() : "",
   };
 }
 
@@ -956,16 +1087,8 @@ function analyticsRange(searchParams) {
 }
 
 function maskIpAddress(value) {
-  const ip = String(value || "");
-  if (net.isIP(ip) === 4) {
-    const octets = ip.split(".");
-    return `${octets[0]}.${octets[1]}.${octets[2]}.*`;
-  }
-  if (net.isIP(ip) === 6) {
-    const parts = ip.split(":").filter(Boolean);
-    return parts.length ? `${parts.slice(0, 3).join(":")}::*` : "IPv6::*";
-  }
-  return "未知来源";
+  const ip = String(value || "").trim();
+  return net.isIP(ip) ? ip : "未知来源";
 }
 
 function handleAdminStats(req, res, searchParams) {
@@ -1336,6 +1459,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith("/api/")) applyCors(req, res);
   if (req.method === "OPTIONS" && pathname.startsWith("/api/")) return res.writeHead(204).end();
   if (pathname === "/api/health" && req.method === "GET") return sendJson(res, 200, { ok: true, service: "guide-admin" });
+  if (pathname === "/api/public/image" && req.method === "GET") return handlePublicImageProxy(req, res, requestUrl.searchParams);
   if (pathname === "/api/public/links" && req.method === "GET") return sendJson(res, 200, { categories: getPublicCategories(), links: getPublicLinks() });
   if (["/api/public/track", "/api/public/click", "/api/public/events", "/api/public/analytics", "/api/public/analytics/click"].includes(pathname) && req.method === "POST") {
     return handlePublicAnalytics(req, res);

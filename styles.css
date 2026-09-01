@@ -838,6 +838,28 @@ button.section-nav-link {
   padding: 30px 36px 34px;
 }
 
+.dialog-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 17px;
+}
+
+.dialog-detail-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--coral) 38%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--coral) 10%, transparent);
+  color: var(--coral);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .dialog-kicker {
   margin-bottom: 9px;
   color: var(--coral);
