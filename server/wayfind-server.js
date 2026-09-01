@@ -331,6 +331,62 @@ function initializeNavigationData() {
 
 initializeNavigationData();
 
+function legacyStepsToMarkdown(guideValue, rawSteps) {
+  const guide = typeof guideValue === "string" ? guideValue.trim() : "";
+  const steps = Array.isArray(rawSteps) ? rawSteps : parseSteps(rawSteps);
+  const sections = [];
+  if (guide) sections.push(guide);
+
+  for (const step of steps) {
+    if (typeof step === "string") {
+      const content = step.trim();
+      if (content) sections.push(`### 教程步骤\n\n${content}`);
+      continue;
+    }
+    if (!step || typeof step !== "object" || Array.isArray(step)) continue;
+    const title = String(step.title || "").trim();
+    const content = String(step.content ?? step.text ?? step.description ?? "").trim();
+    const image = String(step.image ?? step.imageUrl ?? "").trim();
+    if (!title && !content && !image) continue;
+
+    const section = [`### ${title || "教程步骤"}`];
+    if (content) section.push(content);
+    if (image) section.push(`![${title || "步骤图片"}](${image})`);
+    sections.push(section.join("\n\n"));
+  }
+
+  return sections.join("\n\n");
+}
+
+function migrateLegacyGuideData() {
+  let transactionOpen = false;
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    transactionOpen = true;
+    const migrated = db.prepare("SELECT value FROM settings WHERE key = ?").get("markdown_body_migrated_at");
+    if (!migrated) {
+      const rows = db.prepare("SELECT id, guide, steps FROM links").all();
+      const update = db.prepare("UPDATE links SET guide = ?, updated_at = ? WHERE id = ?");
+      for (const row of rows) {
+        const guide = legacyStepsToMarkdown(row.guide, row.steps);
+        if (guide !== String(row.guide || "").trim()) {
+          update.run(guide, nextUpdatedAt(), row.id);
+        }
+      }
+      const now = nextUpdatedAt();
+      db.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+        .run("markdown_body_migrated_at", now, now);
+    }
+    db.exec("COMMIT");
+    transactionOpen = false;
+  } catch (error) {
+    if (transactionOpen) db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+migrateLegacyGuideData();
+
 const loginAttempts = new Map();
 
 function configuredPasswordHash() {
@@ -650,7 +706,7 @@ function normalizeLink(input, existing = {}) {
   const cover = textField(coverValue, "封面图 URL", { required: false, max: 2048 });
   validateImageUrl(cover, "封面图 URL");
 
-  const guide = textField(input.guide ?? input.content ?? existing.guide ?? existing.content ?? "", "操作路径", { required: false, max: 100_000 });
+  const guide = textField(input.guide ?? input.content ?? existing.guide ?? existing.content ?? "", "正文 Markdown", { required: false, max: 100_000 });
   const rawSteps = input.steps ?? existing.steps ?? [];
   const steps = normalizeSteps(rawSteps);
   return {

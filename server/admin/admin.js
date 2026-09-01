@@ -149,7 +149,7 @@ function renderLogin() {
   const error = state.contentError ? `<div class="load-error" role="alert">${escapeHtml(state.contentError)}</div>` : "";
   return `<main class="login-page" aria-labelledby="login-title">
     <section class="login-intro">
-      <div class="brand-lockup"><span class="brand-stamp">指</span><span><strong>指南所后台</strong><small>FIELD GUIDE / EDITORIAL DESK</small></span></div>
+      <div class="brand-lockup"><span class="brand-stamp">Z</span><span><strong>Zhuyz Pro-猪油仔</strong><small>FIELD GUIDE / EDITORIAL DESK</small></span></div>
       <div class="login-copy"><p>项目教程内容工作台</p><h1>把内容排好，<br /><em>把路径讲清。</em></h1></div>
       <p class="login-footnote">管理项目、分类与访客点击数据。</p>
     </section>
@@ -194,7 +194,7 @@ function renderShell() {
     </aside>
     <main id="workspace" class="workspace" tabindex="-1">
       <header class="topbar">
-        <div class="topbar-brand"><span class="brand-stamp">指</span><span><strong>指南所后台</strong><small>PROJECT TUTORIAL DESK</small></span></div>
+        <div class="topbar-brand"><span class="brand-stamp">Z</span><span><strong>Zhuyz Pro-猪油仔</strong><small>PROJECT TUTORIAL DESK</small></span></div>
         <div class="topbar-actions">
           <span class="account-name" title="${escapeAttribute(state.session.username || "管理员")}">${escapeHtml(state.session.username || "管理员")}</span>
           <button class="icon-button" type="button" data-action="toggle-theme" title="切换主题" aria-label="切换主题"><i data-lucide="${currentTheme() === "dark" ? "sun" : "moon"}" aria-hidden="true"></i></button>
@@ -614,11 +614,11 @@ function renderModal() {
 function renderProjectModal(link) {
   const existing = Boolean(link.id);
   const categoryOptions = state.categories.map((category) => `<option value="${escapeAttribute(category.name)}" ${link.category === category.name ? "selected" : ""}>${escapeHtml(category.name)}${category.enabled === false ? "（已隐藏）" : ""}</option>`).join("");
-  const editorSteps = editorStepsForLink(link);
   const toneOptions = TONES.map(([tone, label]) => `<label class="tone-option tone-${tone}"><input type="radio" name="tone" value="${tone}" ${link.tone === tone ? "checked" : ""} /><span class="tone-swatch" aria-hidden="true"></span>${label}</label>`).join("");
   const noCategories = state.categories.length === 0;
   const cover = link.cover || link.image || "";
   const mark = link.mark || nextMark();
+  const guide = String(link.guide || "").trim() || stepsToText(link.steps);
   return `<div class="modal-backdrop editor-backdrop" data-action="modal-backdrop"><section class="modal editor-drawer" role="dialog" aria-modal="true" aria-labelledby="project-editor-title">
     <header class="modal-header editor-header"><div><span class="editor-kicker">项目教程</span><h2 id="project-editor-title">${existing ? "编辑项目教程" : "新建项目教程"}</h2><p>保存后，内容会同步到前台项目索引。</p></div><button class="icon-button modal-close" type="button" data-action="close-modal" title="关闭编辑器" aria-label="关闭编辑器"><i data-lucide="x" aria-hidden="true"></i></button></header>
     <form class="editor-form editor-project-form" data-form="project">
@@ -635,8 +635,19 @@ function renderProjectModal(link) {
         </section>
         <section class="editor-section editor-section--back" aria-labelledby="project-back-title"><div class="editor-section-heading"><div><span class="editor-section-kicker">点击卡片后</span><h3 id="project-back-title" class="editor-section-title">卡片后方</h3><p>用户点击卡片后打开详情弹层时，看到的完整介绍和操作内容。</p></div><span class="editor-section-chip">详情弹层</span></div><div class="form-grid">
           <div class="field wide field--detail-description"><label for="project-detail-description">详情介绍</label><textarea id="project-detail-description" name="detailDescription" maxlength="1000" placeholder="点击卡片后显示在标题下方的完整介绍；留空则沿用卡片简介。">${escapeHtml(link.detailDescription || "")}</textarea><p class="field-help">对应前台详情弹层标题下方的介绍文字，与卡片前方的“卡片简介”分开维护。</p></div>
+          <div class="field wide field--guide"><div class="field-heading"><div><label for="project-guide">正文 Markdown</label><p class="field-help">直接粘贴或编辑完整教程正文，前台会按 Markdown 渲染。</p></div><span class="editor-field-chip">Markdown</span></div><textarea id="project-guide" name="guide" class="markdown-editor" maxlength="100000" spellcheck="false" placeholder="# 教程标题
+
+先说明使用前需要准备什么。
+
+## 操作流程
+
+1. 第一步
+2. 第二步
+3. 更多步骤可以继续添加
+
+> 注意事项
+">${escapeHtml(guide)}</textarea><p class="field-help">支持标题、粗体、列表、链接、图片和代码块；不需要拆分成固定步骤。</p></div>
           <div class="field wide field--cover"><label for="project-cover">封面图 URL</label><div class="cover-field-layout"><div><div class="cover-input-row"><input id="project-cover" name="cover" data-control="project-cover" maxlength="2048" value="${escapeAttribute(cover)}" placeholder="https://example.com/cover.jpg 或 /images/cover.jpg" /><button class="icon-button cover-clear" type="button" data-action="clear-cover" title="清除封面链接" aria-label="清除封面链接" ${cover ? "" : "disabled"}><i data-lucide="x" aria-hidden="true"></i></button></div><p class="field-help">卡片后方顶部的封面；支持 http、https 或站内路径，留空则使用卡片标记。</p></div><div id="project-cover-preview" class="project-cover-preview" data-mark="${escapeAttribute(mark)}" aria-live="polite"><span class="cover-preview-mark">${escapeHtml(mark)}</span><span class="cover-preview-copy">${cover ? "正在加载预览" : "未设置封面"}</span></div></div></div>
-          <div class="field wide field--steps"><div class="field-heading"><div><span class="field-label">操作路径</span><p class="field-help">这里的每一步会显示在详情弹层的“操作路径”中，可分别填写文字和图片。</p></div><button class="secondary-button compact-button" type="button" data-action="add-step"><i data-lucide="plus" aria-hidden="true"></i><span>添加步骤</span></button></div><div class="step-editor" data-step-list>${renderStepEditor(editorSteps)}</div><p class="field-help">最多 100 步；步骤图片使用公开可访问的 http、https 或站内路径。</p></div>
           <div class="field wide field--tips"><label for="project-tips">小提示</label><textarea id="project-tips" name="tips" maxlength="2000" placeholder="提醒用户注意条件、时效或常见问题。">${escapeHtml(link.tips || "")}</textarea><p class="field-help">对应详情弹层底部的“小提示”区域。</p></div>
           <div class="field wide field--url"><label for="project-url">入口 URL</label><input id="project-url" name="url" type="url" maxlength="2048" value="${escapeAttribute(link.url || "")}" placeholder="https://example.com" required /><p class="field-help">对应详情弹层底部的“打开项目入口”按钮。</p></div>
         </div></section>
@@ -645,67 +656,6 @@ function renderProjectModal(link) {
       <footer class="form-footer editor-footer"><span class="form-footer-note">${existing ? "编辑会保留原排序位置。" : "新教程会添加到所属分类的末尾。"} 可见性请在项目教程列表左侧的胶囊按钮中切换。</span><div class="modal-actions"><button class="secondary-button" type="button" data-action="close-modal">取消</button><button class="primary-button" type="submit" ${noCategories ? "disabled" : ""}><span>保存教程</span><i data-lucide="check" aria-hidden="true"></i></button></div></footer>
     </form>
   </section></div>`;
-}
-
-function editorStepsForLink(link) {
-  const raw = array(link?.steps).length ? link.steps : String(link?.guide || "").split(/\r?\n/).map((content) => content.trim()).filter(Boolean);
-  return raw.map((step) => {
-    if (typeof step === "string") return { title: "", content: step, image: "" };
-    return { title: String(step?.title || ""), content: String(step?.content || step?.text || step?.description || ""), image: String(step?.image || step?.imageUrl || "") };
-  }).filter((step) => step.title || step.content || step.image);
-}
-
-function renderStepEditor(steps) {
-  const rows = array(steps).map((step, index) => renderStepEditorRow(step, index)).join("");
-  return `${rows || `<p class="step-editor-empty" data-step-empty>还没有添加操作步骤，点击右上角“添加步骤”开始编辑。</p>`}`;
-}
-
-function renderStepEditorRow(step = {}, index = 0) {
-  const number = String(index + 1).padStart(2, "0");
-  return `<article class="step-editor-row" data-step-row><div class="step-editor-row-head"><span class="step-editor-number" data-step-number>步骤 ${number}</span><button class="quiet-button step-remove" type="button" data-action="remove-step" aria-label="删除步骤 ${number}"><i data-lucide="trash-2" aria-hidden="true"></i><span>删除</span></button></div><div class="step-editor-grid"><div class="field"><label for="step-title-${index}">步骤标题</label><input id="step-title-${index}" data-step-field="title" maxlength="120" value="${escapeAttribute(step.title || "")}" placeholder="例如：先领取新人券" /></div><div class="field"><label for="step-image-${index}">步骤图片 URL（可选）</label><input id="step-image-${index}" data-step-field="image" maxlength="2048" value="${escapeAttribute(step.image || "")}" placeholder="https://example.com/step-01.jpg 或 /images/step-01.jpg" /></div><div class="field wide"><label for="step-content-${index}">步骤说明</label><textarea id="step-content-${index}" data-step-field="content" maxlength="2000" placeholder="说明这一动作应该怎么做，以及完成后会看到什么。">${escapeHtml(step.content || "")}</textarea></div></div></article>`;
-}
-
-function addEditorStep() {
-  const list = document.querySelector("[data-step-list]");
-  if (!list) return;
-  const rows = list.querySelectorAll("[data-step-row]");
-  if (rows.length >= 100) {
-    showToast("操作路径最多支持 100 步", "error");
-    return;
-  }
-  list.querySelector("[data-step-empty]")?.remove();
-  list.insertAdjacentHTML("beforeend", renderStepEditorRow({}, rows.length));
-  renumberEditorSteps();
-  list.querySelectorAll("[data-step-row]:last-child [data-step-field='title']")[0]?.focus();
-  refreshIcons(list);
-}
-
-function removeEditorStep(row) {
-  if (!row) return;
-  const list = row.closest("[data-step-list]");
-  row.remove();
-  if (!list) return;
-  if (!list.querySelector("[data-step-row]")) list.insertAdjacentHTML("beforeend", `<p class="step-editor-empty" data-step-empty>还没有添加操作步骤，点击右上角“添加步骤”开始编辑。</p>`);
-  renumberEditorSteps();
-}
-
-function renumberEditorSteps() {
-  const list = document.querySelector("[data-step-list]");
-  if (!list) return;
-  list.querySelectorAll("[data-step-row]").forEach((row, index) => {
-    const number = String(index + 1).padStart(2, "0");
-    const numberElement = row.querySelector("[data-step-number]");
-    if (numberElement) numberElement.textContent = `步骤 ${number}`;
-    const remove = row.querySelector("[data-action='remove-step']");
-    if (remove) remove.setAttribute("aria-label", `删除步骤 ${number}`);
-    row.querySelectorAll("[data-step-field]").forEach((control) => {
-      const field = control.dataset.stepField;
-      const id = `step-${field}-${index}`;
-      control.id = id;
-      const label = row.querySelector(`label[for^="step-${field}-"]`);
-      if (label) label.htmlFor = id;
-    });
-  });
 }
 
 function renderCategoryModal(category) {
@@ -771,8 +721,6 @@ async function handleClick(event) {
       await resetStatsFilter();
       return;
     }
-    if (action === "add-step") return addEditorStep();
-    if (action === "remove-step") return removeEditorStep(button.closest("[data-step-row]"));
     if (action === "toggle-theme") return toggleTheme();
     if (action === "logout") {
       await logout();
@@ -1013,18 +961,7 @@ async function saveProject(form) {
   const existing = modal?.entity;
   if (!existing) return;
   const data = new FormData(form);
-  const stepRows = [...form.querySelectorAll("[data-step-row]")];
-  const steps = [];
-  stepRows.forEach((row, index) => {
-    const title = String(row.querySelector("[data-step-field='title']")?.value || "").trim();
-    const content = String(row.querySelector("[data-step-field='content']")?.value || "").trim();
-    const image = String(row.querySelector("[data-step-field='image']")?.value || "").trim();
-    if (!title && !content && !image) return;
-    if (!title && !content) throw new Error(`第 ${index + 1} 步请填写步骤标题或步骤说明`);
-    steps.push({ title, content, image });
-  });
-  const guide = steps.map((step) => [step.title, step.content].filter(Boolean).join("：")).join("\n");
-  if (steps.length > 100) throw new Error("操作路径最多支持 100 步");
+  const guide = String(data.get("guide") || "");
   const payload = {
     category: String(data.get("category") || ""),
     title: String(data.get("title") || ""),
@@ -1037,7 +974,9 @@ async function saveProject(form) {
     url: String(data.get("url") || ""),
     cover: String(data.get("cover") || ""),
     guide,
-    steps,
+    // Keep the legacy field in the request for older API/database versions;
+    // the editable source of truth is now the Markdown body above.
+    steps: [],
     tips: String(data.get("tips") || ""),
     adminNote: String(data.get("adminNote") || ""),
   };

@@ -76,8 +76,12 @@ function normalizeLink(item) {
       image: String(step.image || step.imageUrl || "").trim(),
     };
   }).filter((step) => step && (step.title || step.content || step.image));
+  const guide = String(item.guide || item.tutorial || item.content || "").trim()
+    || legacyStepsToMarkdown(rawSteps)
+    || String(item.description || "").trim();
   return {
     ...item,
+    guide,
     steps,
     tips: item.tips || "",
     cover: item.cover || item.coverUrl || "",
@@ -86,6 +90,151 @@ function normalizeLink(item) {
 }
 
 function splitSteps(value) { return String(value || "").split(/\n|。/).map((part) => part.trim()).filter(Boolean).slice(0, 5); }
+function legacyStepsToMarkdown(rawSteps) {
+  const steps = Array.isArray(rawSteps) ? rawSteps : [];
+  return steps.map((step) => {
+    if (typeof step === "string") {
+      const content = step.trim();
+      return content ? `### 教程步骤\n\n${content}` : "";
+    }
+    if (!step || typeof step !== "object") return "";
+    const title = String(step.title || "").trim();
+    const content = String(step.content || step.text || step.description || "").trim();
+    const image = String(step.image || step.imageUrl || "").trim();
+    if (!title && !content && !image) return "";
+    return [`### ${title || "教程步骤"}`, content, image ? `![${title || "步骤图片"}](${image})` : ""].filter(Boolean).join("\n\n");
+  }).filter(Boolean).join("\n\n");
+}
+
+function renderMarkdown(value) {
+  const source = String(value || "").replace(/\r\n?/g, "\n").trim();
+  if (!source) return "";
+  const blocks = [];
+  let paragraph = [];
+  let listType = "";
+  let listItems = [];
+  let quoteLines = [];
+  let code = null;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push(`<p>${renderMarkdownInline(paragraph.join("\n"), true)}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!listItems.length) return;
+    blocks.push(`<${listType}>${listItems.map((item) => `<li>${renderMarkdownInline(item)}</li>`).join("")}</${listType}>`);
+    listType = "";
+    listItems = [];
+  };
+  const flushQuote = () => {
+    if (!quoteLines.length) return;
+    blocks.push(`<blockquote>${renderMarkdown(quoteLines.join("\n"))}</blockquote>`);
+    quoteLines = [];
+  };
+  const flushOpenBlocks = () => {
+    flushParagraph();
+    flushList();
+    flushQuote();
+  };
+
+  for (const line of source.split("\n")) {
+    const fence = line.match(/^ {0,3}```\s*([A-Za-z0-9_-]*)\s*$/);
+    if (code) {
+      if (fence) {
+        const languageClass = code.language ? ` class="language-${escapeAttribute(code.language)}"` : "";
+        blocks.push(`<pre><code${languageClass}>${escapeHtml(code.lines.join("\n"))}</code></pre>`);
+        code = null;
+      } else {
+        code.lines.push(line);
+      }
+      continue;
+    }
+    if (fence) {
+      flushOpenBlocks();
+      code = { language: fence[1], lines: [] };
+      continue;
+    }
+    if (!line.trim()) {
+      flushOpenBlocks();
+      continue;
+    }
+    const heading = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (heading) {
+      flushOpenBlocks();
+      const level = heading[1].length;
+      blocks.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+      continue;
+    }
+    if (/^ {0,3}((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/.test(line)) {
+      flushOpenBlocks();
+      blocks.push("<hr />");
+      continue;
+    }
+    const quote = line.match(/^ {0,3}>\s?(.*)$/);
+    if (quote) {
+      flushParagraph();
+      flushList();
+      quoteLines.push(quote[1]);
+      continue;
+    }
+    flushQuote();
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      flushParagraph();
+      const nextType = unordered ? "ul" : "ol";
+      if (listType && listType !== nextType) flushList();
+      listType = nextType;
+      listItems.push((unordered || ordered)[1]);
+      continue;
+    }
+    flushList();
+    paragraph.push(line);
+  }
+  if (code) {
+    const languageClass = code.language ? ` class="language-${escapeAttribute(code.language)}"` : "";
+    blocks.push(`<pre><code${languageClass}>${escapeHtml(code.lines.join("\n"))}</code></pre>`);
+  }
+  flushOpenBlocks();
+  return blocks.join("");
+}
+
+function renderMarkdownInline(value, preserveBreaks = false) {
+  const source = String(value || "");
+  const tokenPattern = /!\[([^\]]*)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|\[([^\]]+)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|\*([^*]+)\*|_([^_]+)_/g;
+  let output = "";
+  let cursor = 0;
+  let match;
+  while ((match = tokenPattern.exec(source))) {
+    output += escapeHtml(source.slice(cursor, match.index));
+    if (match[1] !== undefined) {
+      const imageUrl = safeMarkdownUrl(match[2]);
+      output += imageUrl
+        ? `<img class="markdown-image" src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(match[1] || "正文图片")}"${match[3] ? ` title="${escapeAttribute(match[3])}"` : ""} loading="lazy" decoding="async" />`
+        : escapeHtml(match[1]);
+    } else if (match[4] !== undefined) {
+      const linkUrl = safeMarkdownUrl(match[5]);
+      output += linkUrl
+        ? `<a href="${escapeAttribute(linkUrl)}"${match[6] ? ` title="${escapeAttribute(match[6])}"` : ""} target="_blank" rel="noopener noreferrer">${escapeHtml(match[4])}</a>`
+        : escapeHtml(match[4]);
+    } else if (match[7] !== undefined) output += `<code>${escapeHtml(match[7])}</code>`;
+    else if (match[8] !== undefined || match[9] !== undefined) output += `<strong>${escapeHtml(match[8] || match[9])}</strong>`;
+    else if (match[10] !== undefined) output += `<del>${escapeHtml(match[10])}</del>`;
+    else output += `<em>${escapeHtml(match[11] || match[12])}</em>`;
+    cursor = tokenPattern.lastIndex;
+  }
+  output += escapeHtml(source.slice(cursor));
+  return preserveBreaks ? output.replace(/\n/g, "<br />") : output;
+}
+
+function safeMarkdownUrl(value) {
+  const trimmed = String(value || "").trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
+  return "";
+}
+
 function comparePosition(left, right) { return Number(left.position || 0) - Number(right.position || 0) || String(left.name || left.title).localeCompare(String(right.name || right.title), "zh-CN"); }
 
 function renderAll() {
@@ -150,7 +299,7 @@ function renderProjectSection(category, projects, index) {
 
 function renderProjectCard(link, index) {
   const tone = link.tone || toneForIndex(index);
-  return `<article class="project-card link-card tone-${escapeAttribute(tone)}" tabindex="0" role="button" aria-haspopup="dialog" aria-controls="project-dialog" data-project-id="${escapeAttribute(link.id)}" aria-label="查看${escapeAttribute(link.title)}教程"><div class="card-topline"><span class="status-badge">${escapeHtml(link.status || "教程")}</span><span class="card-number" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span></div><div class="card-identity"><span class="link-mark" aria-hidden="true">${escapeHtml(link.mark || "指")}</span><h3><span class="card-title-text">${escapeHtml(link.title)}</span><i data-lucide="arrow-up-right" aria-hidden="true"></i></h3></div><p class="card-description">${escapeHtml(link.description || "打开查看项目介绍和操作步骤。")}</p><div class="card-meta"><span>${escapeHtml(link.note || "项目教程")}</span><span>查看完整步骤</span></div></article>`;
+  return `<article class="project-card link-card tone-${escapeAttribute(tone)}" tabindex="0" role="button" aria-haspopup="dialog" aria-controls="project-dialog" data-project-id="${escapeAttribute(link.id)}" aria-label="查看${escapeAttribute(link.title)}教程"><div class="card-topline"><span class="status-badge">${escapeHtml(link.status || "教程")}</span><span class="card-number" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span></div><div class="card-identity"><span class="link-mark" aria-hidden="true">${escapeHtml(link.mark || "指")}</span><h3><span class="card-title-text">${escapeHtml(link.title)}</span><i data-lucide="arrow-up-right" aria-hidden="true"></i></h3></div><p class="card-description">${escapeHtml(link.description || "打开查看项目介绍和完整教程。")}</p><div class="card-meta"><span>${escapeHtml(link.note || "项目教程")}</span><span>查看完整教程</span></div></article>`;
 }
 
 function openDialog(id, trigger = null) {
@@ -158,14 +307,9 @@ function openDialog(id, trigger = null) {
   lastTrigger = trigger || document.activeElement;
   const detailDescription = link.detailDescription || link.description || "";
   const cover = escapeAttribute(escapeCssUrl(link.cover || fallbackCover(link.tone)));
-  const steps = link.steps.map((step) => {
-    const title = escapeHtml(step.title || "");
-    const content = escapeHtml(step.content || "");
-    const image = safeImageUrl(step.image);
-    const text = `${title ? `<strong class="tutorial-step-title">${title}</strong>` : ""}${content ? `<span>${content}</span>` : ""}`;
-    return `<li><div class="tutorial-step-content">${text}${image ? `<img class="tutorial-step-image" src="${escapeAttribute(image)}" alt="${escapeAttribute(step.title || `${link.title}步骤图片`)}" loading="lazy" decoding="async" />` : ""}</div></li>`;
-  }).join("");
-  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-hero tone-${escapeAttribute(link.tone || "teal")}" style="--cover: url('${cover}')"><span class="project-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-copy"><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(detailDescription)}</p><div class="steps-heading"><span>操作路径</span><span>${link.steps.length} 步</span></div><ol class="tutorial-steps">${steps || '<li><div class="tutorial-step-content"><span>暂无详细步骤，请打开项目入口查看最新说明。</span></div></li>'}</ol>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}<a class="dialog-cta" href="${escapeAttribute(normalizeUrl(link.url))}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a></div>`;
+  const guide = link.guide || legacyStepsToMarkdown(link.steps);
+  const markdown = renderMarkdown(guide) || "<p class=\"markdown-empty\">暂无正文，请打开项目入口查看最新说明。</p>";
+  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-hero tone-${escapeAttribute(link.tone || "teal")}" style="--cover: url('${cover}')"><span class="project-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-copy"><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(detailDescription)}</p><div class="markdown-heading"><span>教程正文</span><span>Markdown</span></div><div class="markdown-body">${markdown}</div>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}<a class="dialog-cta" href="${escapeAttribute(normalizeUrl(link.url))}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a></div>`;
   const dialog = document.querySelector("#project-dialog");
   dialog.showModal();
   document.querySelector("#close-dialog")?.focus();
@@ -183,15 +327,10 @@ function closeDialog() {
 
 function matchesSearch(link) {
   const stepText = (link.steps || []).map((step) => [step.title, step.content, step.image].join(" ")).join(" ");
-  return [link.title, link.description, link.detailDescription, link.note, link.category, link.status, link.tips, stepText]
+  return [link.title, link.description, link.detailDescription, link.guide, link.note, link.category, link.status, link.tips, stepText]
     .some((value) => String(value || "").toLowerCase().includes(searchTerm));
 }
 
-function safeImageUrl(value) {
-  const trimmed = String(value || "").trim();
-  if (/^https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed) || (trimmed.startsWith("/") && !trimmed.startsWith("//"))) return trimmed;
-  return "";
-}
 function trackClick(link, event = "link_click") {
   const category = navigationData.categories.find((item) => item.name === link.category);
   sendTrackingEvent({ projectId: link.id, categoryId: category?.id || link.category, eventType: event });
