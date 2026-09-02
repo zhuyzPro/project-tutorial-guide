@@ -27,6 +27,7 @@ let navigationData = { categories: [], links: [] };
 let activeCategory = ALL_CATEGORY_ID;
 let searchTerm = "";
 let lastTrigger = null;
+let lastImageTrigger = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeTheme();
@@ -34,9 +35,34 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelector("#search-input")?.addEventListener("input", (event) => { searchTerm = event.target.value.trim().toLowerCase(); renderCategoryList(); renderProjects(); });
   document.querySelector("#clear-filter")?.addEventListener("click", () => { searchTerm = ""; activeCategory = ALL_CATEGORY_ID; document.querySelector("#search-input").value = ""; renderAll(); });
   document.querySelector("#close-dialog")?.addEventListener("click", closeDialog);
-  document.querySelector("#project-dialog")?.addEventListener("click", (event) => { if (event.target.id === "project-dialog") closeDialog(); });
+  document.querySelector("#project-dialog")?.addEventListener("click", (event) => {
+    if (event.target.id === "project-dialog") {
+      closeDialog();
+      return;
+    }
+    const image = event.target.closest("img[data-lightbox-image]");
+    if (image && event.currentTarget.contains(image)) openImageLightbox(image);
+  });
   document.querySelector("#project-dialog")?.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(); });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && document.querySelector("#project-dialog")?.open) closeDialog(); });
+  document.querySelector("#close-image-lightbox")?.addEventListener("click", closeImageLightbox);
+  document.querySelector("#image-lightbox")?.addEventListener("click", (event) => { if (event.target.id === "image-lightbox") closeImageLightbox(); });
+  document.querySelector("#image-lightbox")?.addEventListener("cancel", (event) => { event.preventDefault(); closeImageLightbox(); });
+  document.addEventListener("keydown", (event) => {
+    const lightbox = document.querySelector("#image-lightbox");
+    if (event.key === "Escape") {
+      if (lightbox?.open) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeImageLightbox();
+      } else if (document.querySelector("#project-dialog")?.open) closeDialog();
+      return;
+    }
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const image = document.activeElement?.closest?.("img[data-lightbox-image]");
+    if (!image || !document.querySelector("#project-dialog")?.contains(image)) return;
+    event.preventDefault();
+    openImageLightbox(image);
+  }, true);
   loadNavigationData();
   refreshIcons();
 });
@@ -115,6 +141,7 @@ function renderMarkdown(value) {
   let listItems = [];
   let quoteLines = [];
   let code = null;
+  let imageGroup = [];
 
   const flushParagraph = () => {
     if (!paragraph.length) return;
@@ -132,10 +159,17 @@ function renderMarkdown(value) {
     blocks.push(`<blockquote>${renderMarkdown(quoteLines.join("\n"))}</blockquote>`);
     quoteLines = [];
   };
+  const flushImageGroup = () => {
+    if (!imageGroup.length) return;
+    const images = imageGroup.map((image) => renderMarkdownImage(image)).join("");
+    blocks.push(imageGroup.length > 1 ? `<div class="markdown-image-grid">${images}</div>` : images);
+    imageGroup = [];
+  };
   const flushOpenBlocks = () => {
     flushParagraph();
     flushList();
     flushQuote();
+    flushImageGroup();
   };
 
   const lines = source.split("\n");
@@ -157,12 +191,15 @@ function renderMarkdown(value) {
       code = { language: fence[1], lines: [] };
       continue;
     }
-    const standaloneImage = standaloneMarkdownImageUrl(line);
+    const standaloneImage = standaloneMarkdownImage(line);
     if (standaloneImage) {
-      flushOpenBlocks();
-      blocks.push(`<img class="markdown-image" src="${escapeAttribute(standaloneImage)}" alt="正文图片" loading="lazy" decoding="async" />`);
+      flushParagraph();
+      flushList();
+      flushQuote();
+      imageGroup.push(standaloneImage);
       continue;
     }
+    flushImageGroup();
     if (!line.trim()) {
       flushOpenBlocks();
       continue;
@@ -236,9 +273,7 @@ function renderMarkdownInline(value, preserveBreaks = false) {
     output += escapeHtml(source.slice(cursor, match.index));
     if (match[1] !== undefined) {
       const imageUrl = safeImageUrl(match[2]);
-      output += imageUrl
-        ? `<img class="markdown-image" src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(match[1] || "正文图片")}"${match[3] ? ` title="${escapeAttribute(match[3])}"` : ""} loading="lazy" decoding="async" />`
-        : escapeHtml(match[1]);
+      output += imageUrl ? renderMarkdownImage({ url: imageUrl, alt: match[1] || "正文图片", title: match[3] || "" }) : escapeHtml(match[1]);
     } else if (match[4] !== undefined) {
       const linkUrl = safeMarkdownUrl(match[5]);
       output += linkUrl
@@ -254,10 +289,25 @@ function renderMarkdownInline(value, preserveBreaks = false) {
   return preserveBreaks ? output.replace(/\n/g, "<br />") : output;
 }
 
+function renderMarkdownImage(image, className = "markdown-image") {
+  const alt = image.alt || "正文图片";
+  return `<img class="${className}" src="${escapeAttribute(image.url)}" alt="${escapeAttribute(alt)}"${image.title ? ` title="${escapeAttribute(image.title)}"` : ""} loading="lazy" decoding="async" data-lightbox-image="true" tabindex="0" role="button" aria-label="${escapeAttribute(`放大查看${alt}`)}" />`;
+}
+
 function standaloneMarkdownImageUrl(value) {
   const candidate = String(value || "").trim();
   if (!candidate || /\s/.test(candidate) || !isMarkdownImagePath(candidate)) return "";
   return safeImageUrl(candidate);
+}
+
+function standaloneMarkdownImage(value) {
+  const line = String(value || "").trim();
+  const directUrl = standaloneMarkdownImageUrl(line);
+  if (directUrl) return { url: directUrl, alt: "正文图片", title: "" };
+  const match = line.match(/^!\[([^\]]*)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)$/);
+  if (!match) return null;
+  const imageUrl = safeImageUrl(match[2]);
+  return imageUrl ? { url: imageUrl, alt: match[1] || "正文图片", title: match[3] || "" } : null;
 }
 
 function isMarkdownImagePath(value) {
@@ -391,6 +441,27 @@ function closeDialog() {
   dialog.close();
   if (lastTrigger && document.contains(lastTrigger)) lastTrigger.focus();
   lastTrigger = null;
+}
+
+function openImageLightbox(image) {
+  const dialog = document.querySelector("#image-lightbox");
+  const preview = document.querySelector("#image-lightbox-image");
+  if (!dialog || !preview || !image?.src) return;
+  lastImageTrigger = image;
+  preview.src = image.currentSrc || image.src;
+  preview.alt = image.alt || "正文图片";
+  if (image.title) preview.title = image.title;
+  else preview.removeAttribute("title");
+  dialog.showModal();
+  document.querySelector("#close-image-lightbox")?.focus();
+}
+
+function closeImageLightbox() {
+  const dialog = document.querySelector("#image-lightbox");
+  if (!dialog?.open) return;
+  dialog.close();
+  if (lastImageTrigger && document.contains(lastImageTrigger)) lastImageTrigger.focus();
+  lastImageTrigger = null;
 }
 
 function matchesSearch(link) {

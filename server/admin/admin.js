@@ -824,10 +824,17 @@ function renderPreviewMarkdown(value) {
   let listItems = [];
   let quoteLines = [];
   let code = null;
+  let imageGroup = [];
   const flushParagraph = () => { if (paragraph.length) { blocks.push(`<p>${renderPreviewMarkdownInline(paragraph.join("\n"), true)}</p>`); paragraph = []; } };
   const flushList = () => { if (listItems.length) { blocks.push(`<${listType}>${listItems.map((item) => `<li>${renderPreviewMarkdownInline(item)}</li>`).join("")}</${listType}>`); listType = ""; listItems = []; } };
   const flushQuote = () => { if (quoteLines.length) { blocks.push(`<blockquote>${renderPreviewMarkdown(quoteLines.join("\n"))}</blockquote>`); quoteLines = []; } };
-  const flushOpenBlocks = () => { flushParagraph(); flushList(); flushQuote(); };
+  const flushImageGroup = () => {
+    if (!imageGroup.length) return;
+    const images = imageGroup.map((image) => `<img class="preview-markdown-image" src="${escapeAttribute(image.url)}" alt="${escapeAttribute(image.alt)}"${image.title ? ` title="${escapeAttribute(image.title)}"` : ""} loading="lazy" decoding="async" />`).join("");
+    blocks.push(imageGroup.length > 1 ? `<div class="preview-markdown-image-grid">${images}</div>` : images);
+    imageGroup = [];
+  };
+  const flushOpenBlocks = () => { flushParagraph(); flushList(); flushQuote(); flushImageGroup(); };
   const lines = source.split("\n");
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
@@ -837,12 +844,15 @@ function renderPreviewMarkdown(value) {
       continue;
     }
     if (fence) { flushOpenBlocks(); code = []; continue; }
-    const standaloneImage = standalonePreviewImageUrl(line);
+    const standaloneImage = standalonePreviewImage(line);
     if (standaloneImage) {
-      flushOpenBlocks();
-      blocks.push(`<img class="preview-markdown-image" src="${escapeAttribute(standaloneImage)}" alt="正文图片" loading="lazy" decoding="async" />`);
+      flushParagraph();
+      flushList();
+      flushQuote();
+      imageGroup.push(standaloneImage);
       continue;
     }
+    flushImageGroup();
     if (!line.trim()) { flushOpenBlocks(); continue; }
     const tableHeader = parsePreviewMarkdownTableRow(line);
     if (tableHeader.length > 1 && index + 1 < lines.length && isPreviewMarkdownTableDivider(lines[index + 1])) {
@@ -906,6 +916,16 @@ function standalonePreviewImageUrl(value) {
   const candidate = String(value || "").trim();
   if (!candidate || /\s/.test(candidate) || !isPreviewImagePath(candidate)) return "";
   return safeImageUrl(candidate);
+}
+
+function standalonePreviewImage(value) {
+  const line = String(value || "").trim();
+  const directUrl = standalonePreviewImageUrl(line);
+  if (directUrl) return { url: directUrl, alt: "正文图片", title: "" };
+  const match = line.match(/^!\[([^\]]*)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)$/);
+  if (!match) return null;
+  const imageUrl = safeImageUrl(match[2]);
+  return imageUrl ? { url: imageUrl, alt: match[1] || "正文图片", title: match[3] || "" } : null;
 }
 
 function isPreviewImagePath(value) {

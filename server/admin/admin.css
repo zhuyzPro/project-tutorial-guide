@@ -640,6 +640,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .preview-markdown th, .preview-markdown td { padding: 7px 8px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
 .preview-markdown th { background: var(--surface-muted); color: var(--ink); font-weight: 800; }
 .preview-markdown-image { display: block; max-width: 100%; height: auto; margin: 9px 0 12px; border: 1px solid var(--line); border-radius: 4px; }
+.preview-markdown-image-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; margin: 9px 0 12px; }
+.preview-markdown-image-grid > .preview-markdown-image { width: 100%; max-width: none; margin: 0; }
 .preview-markdown-empty { color: var(--ink-faint); font-style: italic; }
 .preview-tips { display: flex; gap: 8px; margin: 15px 0; padding: 9px 10px; border-left: 3px solid var(--amber); background: var(--amber-soft); }.preview-tips > .lucide { width: 15px; height: 15px; flex: 0 0 auto; color: var(--amber); }.preview-tips strong { display: block; margin-bottom: 2px; font-size: 10px; }.preview-tips p { margin: 0; color: var(--ink-soft); font-size: 11px; }
 .preview-entry { display: flex; min-height: 38px; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; border-radius: 4px; background: var(--ink); color: var(--surface); font-size: 11px; font-weight: 800; }.preview-entry .lucide { width: 14px; height: 14px; }.preview-entry.is-empty { border: 1px dashed var(--line-strong); background: transparent; color: var(--ink-faint); font-weight: 700; }
@@ -925,6 +927,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .editor-drawer .modal-header { padding: 16px; }
   .editor-workbench-body { grid-template-columns: 1fr; grid-template-rows: minmax(255px, 0.72fr) minmax(0, 1.28fr); }
   .editor-preview-pane { max-height: none; padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .preview-markdown-image-grid { grid-template-columns: 1fr; }
   .editor-project-form { border-left: 0; }
   .editor-scroll { padding: 18px 16px 24px; }
   .editor-drawer .form-grid { grid-template-columns: 1fr; gap: 15px; }
