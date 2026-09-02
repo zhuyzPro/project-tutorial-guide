@@ -423,7 +423,7 @@ function renderProjectSection(category, projects, index) {
 
 function renderProjectCard(link, index) {
   const tone = link.tone || toneForIndex(index);
-  return `<article class="project-card link-card tone-${escapeAttribute(tone)}" tabindex="0" role="button" aria-haspopup="dialog" aria-controls="project-dialog" data-project-id="${escapeAttribute(link.id)}" aria-label="查看${escapeAttribute(link.title)}教程"><div class="card-topline"><span class="status-badge">${escapeHtml(link.status || "教程")}</span><span class="card-number" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span></div><div class="card-identity"><span class="link-mark" aria-hidden="true">${escapeHtml(link.mark || "指")}</span><h3><span class="card-title-text">${escapeHtml(link.title)}</span><i data-lucide="arrow-up-right" aria-hidden="true"></i></h3></div><p class="card-description">${escapeHtml(link.description || "打开查看项目介绍和完整教程。")}</p><div class="card-meta"><span>${escapeHtml(link.note || "项目教程")}</span><span>查看完整教程</span></div></article>`;
+  return `<article class="project-card link-card tone-${escapeAttribute(tone)}" tabindex="0" role="button" aria-haspopup="dialog" aria-controls="project-dialog" data-project-id="${escapeAttribute(link.id)}" aria-label="查看${escapeAttribute(link.title)}教程"><div class="card-topline"><span class="status-badge">${escapeHtml(link.status || "教程")}</span><span class="card-number" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span></div><div class="card-identity"><span class="link-mark" aria-hidden="true">${renderMark(link.mark, "指")}</span><h3><span class="card-title-text">${escapeHtml(link.title)}</span><i data-lucide="arrow-up-right" aria-hidden="true"></i></h3></div><p class="card-description">${escapeHtml(link.description || "打开查看项目介绍和完整教程。")}</p><div class="card-meta"><span>${escapeHtml(link.note || "项目教程")}</span><span>查看完整教程</span></div></article>`;
 }
 
 function openDialog(id, trigger = null) {
@@ -434,7 +434,7 @@ function openDialog(id, trigger = null) {
   const markdown = renderMarkdown(guide) || "<p class=\"markdown-empty\">暂无正文，请打开项目入口查看最新说明。</p>";
   const entryUrl = normalizeUrl(link.url);
   const entryCta = entryUrl ? `<a class="dialog-cta" href="${escapeAttribute(entryUrl)}" target="_blank" rel="noopener noreferrer" data-track-id="${escapeAttribute(link.id)}"><span>打开项目入口</span><i data-lucide="external-link" aria-hidden="true"></i></a>` : "";
-  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-copy"><div class="dialog-detail-meta"><span class="dialog-detail-mark">${escapeHtml(link.mark || "01")}</span><span class="status-badge">${escapeHtml(link.status || "指南")}</span></div><div class="dialog-kicker">${escapeHtml(link.category)} / FIELD NOTE</div><h2 id="dialog-title">${escapeHtml(link.title)}</h2><p class="dialog-description">${escapeHtml(detailDescription)}</p><div class="markdown-heading"><span>教程正文</span><span>Markdown</span></div><div class="markdown-body">${markdown}</div>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}${entryCta}</div>`;
+  document.querySelector("#dialog-content").innerHTML = `<div class="dialog-copy"><div class="dialog-kicker">${escapeHtml(link.category)}</div><h2 id="dialog-title">${escapeHtml(link.title)}<span class="dialog-title-status status-badge">${escapeHtml(link.status || "指南")}</span></h2><p class="dialog-description">${escapeHtml(detailDescription)}</p><div class="markdown-heading"><span>教程正文</span></div><div class="markdown-body">${markdown}</div>${link.tips ? `<aside class="tips-box"><i data-lucide="lightbulb" aria-hidden="true"></i><p><strong>小提示</strong>${escapeHtml(link.tips)}</p></aside>` : ""}${entryCta}</div>`;
   const dialog = document.querySelector("#project-dialog");
   dialog.showModal();
   document.querySelector("#close-dialog")?.focus();
@@ -497,6 +497,17 @@ function fallbackCover(tone) { const palette = { orange: "#f59e0b", rose: "#e76f
 function normalizeUrl(value) { const trimmed = String(value || "").trim(); if (!trimmed) return ""; return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`; }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]); }
 function escapeAttribute(value) { return escapeHtml(value).replace(/`/g, "&#096;"); }
+function renderMark(value, fallback = "指") {
+  const characters = Array.from(String(value ?? "").trim() || fallback).slice(0, 12);
+  if (characters.length <= 3) return `<span class="mark-line">${escapeHtml(characters.join(""))}</span>`;
+  const lines = [];
+  if (characters.length === 4) {
+    lines.push(characters.slice(0, 2), characters.slice(2));
+  } else {
+    for (let index = 0; index < characters.length; index += 3) lines.push(characters.slice(index, index + 3));
+  }
+  return lines.map((line) => `<span class="mark-line">${escapeHtml(line.join(""))}</span>`).join("");
+}
 function escapeCssUrl(value) { return String(value ?? "").replace(/[\\'"()\n\r]/g, (character) => ({ "\\": "\\\\", "'": "\\'", '"': '\\"', "(": "\\(", ")": "\\)", "\n": "", "\r": "" })[character]); }
 
 function initializeTheme() { applyTheme(readStoredTheme() === "dark" ? "dark" : "light", false); document.querySelector("#theme-toggle")?.addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark")); }

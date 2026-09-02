@@ -605,12 +605,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .preview-card { --tone: var(--pine); position: relative; display: flex; min-height: 230px; flex-direction: column; padding: 19px 18px 16px; overflow: hidden; }
 .preview-card::before { position: absolute; top: 0; right: 0; left: 0; height: 3px; background: var(--tone); content: ""; }
 .preview-card.tone-teal { --tone: #2e9b91; }.preview-card.tone-blue { --tone: #4d73ca; }.preview-card.tone-orange { --tone: #df8a36; }.preview-card.tone-rose { --tone: #d76886; }.preview-card.tone-lime { --tone: #86a841; }.preview-card.tone-yellow { --tone: #c59631; }.preview-card.tone-purple { --tone: #8d65b7; }.preview-card.tone-coral { --tone: #cf6552; }
-.preview-card-topline, .preview-card-identity, .preview-card-meta, .preview-detail-meta { display: flex; align-items: center; }
+.preview-card-topline, .preview-card-identity, .preview-card-meta { display: flex; align-items: center; }
 .preview-card-topline { justify-content: space-between; gap: 10px; }
 .preview-status { display: inline-flex; max-width: 66%; min-height: 24px; align-items: center; padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--tone, var(--pine)) 36%, var(--line)); border-radius: 4px; background: color-mix(in srgb, var(--tone, var(--pine)) 10%, var(--surface)); color: var(--tone, var(--pine)); font-size: 10px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
 .preview-card-number { color: color-mix(in srgb, var(--ink) 18%, transparent); font-family: Georgia, "Noto Serif SC", serif; font-size: 38px; font-weight: 800; line-height: 0.8; }
 .preview-card-identity { gap: 10px; margin-top: 20px; }
-.preview-mark, .preview-detail-mark { display: grid; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--tone, var(--pine)) 38%, var(--line)); background: color-mix(in srgb, var(--tone, var(--pine)) 11%, transparent); color: var(--tone, var(--pine)); font-weight: 800; text-align: center; overflow-wrap: anywhere; }
+.preview-mark { display: grid; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--tone, var(--pine)) 38%, var(--line)); background: color-mix(in srgb, var(--tone, var(--pine)) 11%, transparent); color: var(--tone, var(--pine)); font-weight: 800; text-align: center; white-space: nowrap; word-break: keep-all; }
+.preview-mark .mark-line { display: block; white-space: nowrap; }
 .preview-mark { width: 40px; height: 40px; border-radius: 6px; font-size: 13px; }
 .preview-card-identity h4 { display: flex; min-width: 0; align-items: center; gap: 5px; margin: 0; color: var(--ink); font-size: 16px; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
 .preview-card-identity h4 svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--tone); }
@@ -619,13 +620,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .preview-card-meta span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .preview-card-meta span:last-child { white-space: nowrap; }
 .preview-detail { padding: 21px 20px 22px; }
-.preview-detail-meta { gap: 8px; margin-bottom: 16px; }
-.preview-detail-mark { width: 34px; height: 34px; border-radius: 5px; font-size: 11px; }
 .preview-detail-kicker { margin: 0 0 7px; color: var(--coral); font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
-.preview-detail-title { margin: 0 0 8px; color: var(--ink); font-size: 24px; font-weight: 800; line-height: 1.18; overflow-wrap: anywhere; }
+.preview-detail-title-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.preview-detail-title { min-width: 0; flex: 0 1 auto; margin: 0; color: var(--ink); font-size: 24px; font-weight: 800; line-height: 1.18; overflow-wrap: anywhere; }
+.preview-detail-status { max-width: 100%; flex: 0 0 auto; }
 .preview-detail-description { margin: 0 0 19px; color: var(--ink-soft); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
-.preview-markdown-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--ink); color: var(--ink); font-size: 10px; font-weight: 800; }
-.preview-markdown-heading span:last-child { color: var(--ink-soft); }
+.preview-markdown-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--ink); color: var(--ink); font-size: 10px; font-weight: 800; }
 .preview-markdown { color: var(--ink); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .preview-markdown > * { max-width: 100%; }
 .preview-markdown p { margin: 0 0 11px; }

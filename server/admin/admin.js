@@ -638,8 +638,8 @@ function renderProjectModal(link) {
           <div class="form-grid">
             <div class="field field--category"><label for="project-category">所属分类</label><select id="project-category" name="category" data-control="project-category" required ${noCategories ? "disabled" : ""}>${categoryOptions}</select><p class="field-help">首页分类标题和详情顶部分类标识都使用这里的值。</p>${noCategories ? `<p class="field-help">请先创建一个分类。</p>` : ""}</div>
             <div class="field field--title"><label for="project-title">项目标题</label><input id="project-title" name="title" maxlength="80" value="${escapeAttribute(link.title || "")}" placeholder="例如：奶茶首单优惠" required /><p class="field-help">同时显示在首页卡片和点击后的详情标题。</p></div>
-            <div class="field field--status"><label for="project-status">状态文案</label><input id="project-status" name="status" maxlength="24" value="${escapeAttribute(link.status || "待核实")}" placeholder="例如：实测可用" required /><p class="field-help">显示在卡片前方顶部，也会显示在详情信息顶部。</p></div>
-            <div class="field field--mark"><label for="project-mark">卡片标记</label><input id="project-mark" name="mark" data-control="project-mark" maxlength="12" value="${escapeAttribute(mark)}" placeholder="例如：益" required /><p class="field-help">显示在首页卡片左侧，也会显示在详情信息顶部。</p></div>
+            <div class="field field--status"><label for="project-status">状态文案</label><input id="project-status" name="status" maxlength="24" value="${escapeAttribute(link.status || "待核实")}" placeholder="例如：实测可用" required /><p class="field-help">显示在卡片前方顶部，也会显示在详情标题后。</p></div>
+            <div class="field field--mark"><label for="project-mark">卡片标记</label><input id="project-mark" name="mark" data-control="project-mark" maxlength="12" value="${escapeAttribute(mark)}" placeholder="例如：益" required /><p class="field-help">显示在首页卡片左侧；详情标题不再重复显示。</p></div>
             <div class="field wide field--description"><label for="project-description">卡片简介</label><textarea id="project-description" name="description" maxlength="240" placeholder="一句话说明这张卡片能帮用户做什么" required>${escapeHtml(link.description || "")}</textarea><p class="field-help">这是卡片前方的主简介；详情介绍留空时会自动沿用它。</p></div>
             <div class="field wide field--note"><label for="project-note">卡片说明</label><input id="project-note" name="note" maxlength="80" value="${escapeAttribute(link.note || "")}" placeholder="例如：准备时间 · 5 分钟" required /><p class="field-help">显示在首页卡片底部的补充信息，例如耗时、门槛或适用人群。</p></div>
           </div>
@@ -801,18 +801,29 @@ function renderProjectPreviewContent(link, mode = "front") {
   const category = link.category || "所属分类";
   const title = link.title || "项目标题";
   const mark = link.mark || "指";
+  const markHtml = renderPreviewMark(mark);
   const status = link.status || "状态文案";
   const description = link.description || "卡片简介会显示在这里。";
   const note = link.note || "卡片说明";
   if (mode !== "back") {
-    return `<article class="preview-card tone-${escapeAttribute(tone)}"><div class="preview-card-topline"><span class="preview-status">${escapeHtml(status)}</span><span class="preview-card-number">01</span></div><div class="preview-card-identity"><span class="preview-mark">${escapeHtml(mark)}</span><h4>${escapeHtml(title)}<i data-lucide="arrow-up-right" aria-hidden="true"></i></h4></div><p class="preview-card-description">${escapeHtml(description)}</p><div class="preview-card-meta"><span>${escapeHtml(note)}</span><span>查看完整教程</span></div></article>`;
+    return `<article class="preview-card tone-${escapeAttribute(tone)}"><div class="preview-card-topline"><span class="preview-status">${escapeHtml(status)}</span><span class="preview-card-number">01</span></div><div class="preview-card-identity"><span class="preview-mark">${markHtml}</span><h4>${escapeHtml(title)}<i data-lucide="arrow-up-right" aria-hidden="true"></i></h4></div><p class="preview-card-description">${escapeHtml(description)}</p><div class="preview-card-meta"><span>${escapeHtml(note)}</span><span>查看完整教程</span></div></article>`;
   }
   const detailDescription = link.detailDescription || description;
   const guide = String(link.guide || "").trim();
   const markdown = renderPreviewMarkdown(guide) || `<p class="preview-markdown-empty">正文 Markdown 预览会显示在这里。</p>`;
   const tips = link.tips ? `<aside class="preview-tips"><i data-lucide="lightbulb" aria-hidden="true"></i><div><strong>小提示</strong><p>${escapeHtml(link.tips)}</p></div></aside>` : "";
   const entry = normalizePreviewUrl(link.url) ? `<div class="preview-entry"><i data-lucide="external-link" aria-hidden="true"></i><span>打开项目入口</span></div>` : `<div class="preview-entry is-empty"><span>未设置入口 URL</span></div>`;
-  return `<article class="preview-detail"><div class="preview-detail-meta"><span class="preview-detail-mark">${escapeHtml(mark)}</span><span class="preview-status">${escapeHtml(status)}</span></div><p class="preview-detail-kicker">${escapeHtml(category)} / FIELD NOTE</p><h4 class="preview-detail-title">${escapeHtml(title)}</h4><p class="preview-detail-description">${escapeHtml(detailDescription)}</p><div class="preview-markdown-heading"><span>教程正文</span><span>Markdown</span></div><div class="preview-markdown">${markdown}</div>${tips}${entry}</article>`;
+  return `<article class="preview-detail"><p class="preview-detail-kicker">${escapeHtml(category)}</p><div class="preview-detail-title-row"><h4 class="preview-detail-title">${escapeHtml(title)}</h4><span class="preview-status preview-detail-status">${escapeHtml(status)}</span></div><p class="preview-detail-description">${escapeHtml(detailDescription)}</p><div class="preview-markdown-heading"><span>教程正文</span></div><div class="preview-markdown">${markdown}</div>${tips}${entry}</article>`;
+}
+
+function renderPreviewMark(value) {
+  const text = String(value || "").trim() || "指";
+  const characters = Array.from(text).slice(0, 12);
+  if (characters.length <= 3) return `<span class="mark-line">${escapeHtml(characters.join(""))}</span>`;
+  const lines = characters.length === 4
+    ? [characters.slice(0, 2), characters.slice(2)]
+    : Array.from({ length: Math.ceil(characters.length / 3) }, (_, index) => characters.slice(index * 3, index * 3 + 3));
+  return lines.map((line) => `<span class="mark-line">${escapeHtml(line.join(""))}</span>`).join("");
 }
 
 function renderPreviewMarkdown(value) {
