@@ -790,7 +790,7 @@ button.section-nav-link {
   height: 100%;
   min-height: 0;
   place-items: center;
-  padding: 20px;
+  padding: 22px;
 }
 
 .image-lightbox-image {
@@ -804,8 +804,8 @@ button.section-nav-link {
 
 .image-lightbox-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: max(22px, calc(env(safe-area-inset-top) + 12px));
+  right: max(16px, calc(env(safe-area-inset-right) + 12px));
   z-index: 1;
   display: grid;
   width: 38px;
@@ -827,6 +827,24 @@ button.section-nav-link {
 .image-lightbox-close svg {
   width: 19px;
   height: 19px;
+}
+
+@media (max-width: 600px) {
+  .image-lightbox {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - 28px);
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 28px);
+  }
+
+  .image-lightbox-frame {
+    padding: max(72px, calc(env(safe-area-inset-top) + 58px)) 14px 24px;
+  }
+
+  .image-lightbox-close {
+    top: max(34px, calc(env(safe-area-inset-top) + 24px));
+    right: max(16px, calc(env(safe-area-inset-right) + 14px));
+  }
 }
 
 .dialog-frame {
@@ -860,6 +878,13 @@ button.section-nav-link {
 .dialog-close svg {
   width: 18px;
   height: 18px;
+}
+
+@media (max-width: 600px) {
+  .dialog-close {
+    top: max(34px, calc(env(safe-area-inset-top) + 24px));
+    right: max(16px, calc(env(safe-area-inset-right) + 14px));
+  }
 }
 
 .dialog-hero {
