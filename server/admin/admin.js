@@ -38,6 +38,8 @@ const state = {
   contentError: "",
 };
 
+let projectPreviewSync = null;
+
 document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("click", handleClick);
   document.addEventListener("submit", handleSubmit);
@@ -137,6 +139,7 @@ async function loadStats(requestId = state.statsRequestId, signal) {
 function render() {
   const app = document.querySelector("#app");
   if (!app) return;
+  destroyProjectPreviewSync();
   document.body.classList.toggle("modal-open", Boolean(state.modal));
   app.className = "";
   app.innerHTML = state.session ? renderShell() : renderLogin();
@@ -146,6 +149,7 @@ function render() {
       const form = document.querySelector("form[data-form='project']");
       updateCoverPreview(form?.querySelector("[data-control='project-cover']")?.value || "");
       updateProjectLivePreview(form);
+      setupProjectPreviewSync(form);
     });
   }
 }
@@ -642,7 +646,41 @@ function renderProjectModal(link) {
         </section>
         <section class="editor-section editor-section--back" aria-labelledby="project-back-title"><div class="editor-section-heading"><div><span class="editor-section-kicker">点击卡片后</span><h3 id="project-back-title" class="editor-section-title">卡片后方</h3><p>用户点击卡片后打开详情弹层时，看到的完整介绍和操作内容。</p></div><span class="editor-section-chip">详情弹层</span></div><div class="form-grid">
           <div class="field wide field--detail-description"><label for="project-detail-description">详情介绍</label><textarea id="project-detail-description" name="detailDescription" maxlength="1000" placeholder="点击卡片后显示在标题下方的完整介绍；留空则沿用卡片简介。">${escapeHtml(link.detailDescription || "")}</textarea><p class="field-help">对应前台详情弹层标题下方的介绍文字，与卡片前方的“卡片简介”分开维护。</p></div>
-          <div class="field wide field--guide"><div class="field-heading"><div><label for="project-guide">正文 Markdown</label><p class="field-help">直接粘贴或编辑完整教程正文，前台会按 Markdown 渲染。</p></div><span class="editor-field-chip">Markdown</span></div><textarea id="project-guide" name="guide" class="markdown-editor" maxlength="100000" spellcheck="false" placeholder="# 教程标题
+          <div class="field wide field--guide"><div class="field-heading"><div><label for="project-guide">正文 Markdown</label><p class="field-help">直接粘贴或编辑完整教程正文，前台会按 Markdown 渲染。</p></div><span class="editor-field-chip">Markdown</span></div>
+            <div class="markdown-toolbar" data-markdown-toolbar role="toolbar" aria-label="Markdown 工具栏">
+              <div class="markdown-toolbar-group" role="group" aria-label="标题级别">
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="heading" data-markdown-level="1" title="一级标题" aria-label="一级标题"><span aria-hidden="true">H1</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="heading" data-markdown-level="2" title="二级标题" aria-label="二级标题"><span aria-hidden="true">H2</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="heading" data-markdown-level="3" title="三级标题" aria-label="三级标题"><span aria-hidden="true">H3</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="heading" data-markdown-level="4" title="四级标题" aria-label="四级标题"><span aria-hidden="true">H4</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="heading" data-markdown-level="5" title="五级标题" aria-label="五级标题"><span aria-hidden="true">H5</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="heading" data-markdown-level="6" title="六级标题" aria-label="六级标题"><span aria-hidden="true">H6</span></button>
+              </div>
+              <span class="markdown-toolbar-divider" aria-hidden="true"></span>
+              <div class="markdown-toolbar-group" role="group" aria-label="文字样式">
+                <button class="markdown-tool-button markdown-tool-button--strong" type="button" data-action="markdown-format" data-markdown-command="bold" title="粗体" aria-label="粗体"><span aria-hidden="true">B</span></button>
+                <button class="markdown-tool-button markdown-tool-button--emphasis" type="button" data-action="markdown-format" data-markdown-command="italic" title="斜体" aria-label="斜体"><span aria-hidden="true">I</span></button>
+                <button class="markdown-tool-button markdown-tool-button--strike" type="button" data-action="markdown-format" data-markdown-command="strike" title="删除线" aria-label="删除线"><span aria-hidden="true">S</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="inline-code" title="行内代码" aria-label="行内代码"><span aria-hidden="true">&lt;/&gt;</span></button>
+              </div>
+              <span class="markdown-toolbar-divider" aria-hidden="true"></span>
+              <div class="markdown-toolbar-group" role="group" aria-label="段落和列表">
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="quote" title="引用" aria-label="引用"><span aria-hidden="true">&gt; 引用</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="unordered-list" title="无序列表" aria-label="无序列表"><span aria-hidden="true">- 列表</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="ordered-list" title="有序列表" aria-label="有序列表"><span aria-hidden="true">1. 列表</span></button>
+              </div>
+              <span class="markdown-toolbar-divider" aria-hidden="true"></span>
+              <div class="markdown-toolbar-group" role="group" aria-label="媒体和结构">
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="code-block" title="代码块" aria-label="代码块"><span aria-hidden="true">\`\`\`</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="link" title="链接" aria-label="链接"><span aria-hidden="true">链接</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="image" title="图片" aria-label="图片"><span aria-hidden="true">图片</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="table" title="表格" aria-label="表格"><span aria-hidden="true">表格</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="hr" title="分割线" aria-label="分割线"><span aria-hidden="true">---</span></button>
+              </div>
+              <span class="markdown-toolbar-divider" aria-hidden="true"></span>
+              <button class="markdown-tool-button markdown-tool-button--clear" type="button" data-action="markdown-format" data-markdown-command="clear" title="清空正文" aria-label="清空正文"><span aria-hidden="true">清空</span></button>
+            </div>
+            <textarea id="project-guide" name="guide" class="markdown-editor" maxlength="100000" spellcheck="false" placeholder="# 教程标题
 
 先说明使用前需要准备什么。
 
@@ -691,6 +729,73 @@ function updateProjectLivePreview(form) {
   refreshIcons(preview);
 }
 
+function setProjectPreviewMode(mode, { scroll = false } = {}) {
+  const nextMode = mode === "back" ? "back" : "front";
+  state.projectPreviewMode = nextMode;
+  document.querySelectorAll(".editor-preview-tab").forEach((tab) => {
+    const active = tab.dataset.previewMode === nextMode;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  const form = document.querySelector("form[data-form='project']");
+  updateProjectLivePreview(form);
+  if (scroll) scrollProjectEditorTo(nextMode, form);
+}
+
+function scrollProjectEditorTo(mode, form = document.querySelector("form[data-form='project']")) {
+  const editorScroll = form?.querySelector(".editor-scroll");
+  const target = editorScroll?.querySelector(mode === "back" ? ".editor-section--back" : ".editor-section--front");
+  if (!editorScroll || !target) return;
+  const scrollRect = editorScroll.getBoundingClientRect();
+  const targetTop = Math.max(0, target.getBoundingClientRect().top - scrollRect.top + editorScroll.scrollTop - 8);
+  if (projectPreviewSync) {
+    projectPreviewSync.programmaticTarget = { mode, top: targetTop, expiresAt: performance.now() + 1400 };
+  }
+  editorScroll.scrollTo({ top: targetTop, behavior: "smooth" });
+}
+
+function setupProjectPreviewSync(form) {
+  const editorScroll = form?.querySelector(".editor-scroll");
+  const front = editorScroll?.querySelector(".editor-section--front");
+  const back = editorScroll?.querySelector(".editor-section--back");
+  if (!editorScroll || !front || !back) return;
+
+  const sync = {
+    editorScroll,
+    front,
+    back,
+    frame: 0,
+    programmaticTarget: null,
+    onScroll: null,
+  };
+  const syncFromScroll = () => {
+    sync.frame = 0;
+    const target = sync.programmaticTarget;
+    if (target) {
+      const reached = Math.abs(editorScroll.scrollTop - target.top) <= 6;
+      if (!reached && performance.now() < target.expiresAt) return;
+      sync.programmaticTarget = null;
+    }
+    const scrollRect = editorScroll.getBoundingClientRect();
+    const switchLine = scrollRect.top + Math.min(140, Math.max(64, editorScroll.clientHeight * 0.25));
+    const mode = back.getBoundingClientRect().top <= switchLine ? "back" : "front";
+    if (mode !== state.projectPreviewMode) setProjectPreviewMode(mode);
+  };
+  sync.onScroll = () => {
+    if (!sync.frame) sync.frame = window.requestAnimationFrame(syncFromScroll);
+  };
+  projectPreviewSync = sync;
+  editorScroll.addEventListener("scroll", sync.onScroll, { passive: true });
+  syncFromScroll();
+}
+
+function destroyProjectPreviewSync() {
+  if (!projectPreviewSync) return;
+  projectPreviewSync.editorScroll.removeEventListener("scroll", projectPreviewSync.onScroll);
+  if (projectPreviewSync.frame) window.cancelAnimationFrame(projectPreviewSync.frame);
+  projectPreviewSync = null;
+}
+
 function renderProjectPreviewContent(link, mode = "front") {
   const tone = TONES.some(([value]) => value === link.tone) ? link.tone : "teal";
   const category = link.category || "所属分类";
@@ -723,14 +828,40 @@ function renderPreviewMarkdown(value) {
   const flushList = () => { if (listItems.length) { blocks.push(`<${listType}>${listItems.map((item) => `<li>${renderPreviewMarkdownInline(item)}</li>`).join("")}</${listType}>`); listType = ""; listItems = []; } };
   const flushQuote = () => { if (quoteLines.length) { blocks.push(`<blockquote>${renderPreviewMarkdown(quoteLines.join("\n"))}</blockquote>`); quoteLines = []; } };
   const flushOpenBlocks = () => { flushParagraph(); flushList(); flushQuote(); };
-  for (const line of source.split("\n")) {
+  const lines = source.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const fence = line.match(/^ {0,3}```\s*([A-Za-z0-9_-]*)\s*$/);
     if (code) {
       if (fence) { blocks.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`); code = null; } else code.push(line);
       continue;
     }
     if (fence) { flushOpenBlocks(); code = []; continue; }
+    const standaloneImage = standalonePreviewImageUrl(line);
+    if (standaloneImage) {
+      flushOpenBlocks();
+      blocks.push(`<img class="preview-markdown-image" src="${escapeAttribute(standaloneImage)}" alt="正文图片" loading="lazy" decoding="async" />`);
+      continue;
+    }
     if (!line.trim()) { flushOpenBlocks(); continue; }
+    const tableHeader = parsePreviewMarkdownTableRow(line);
+    if (tableHeader.length > 1 && index + 1 < lines.length && isPreviewMarkdownTableDivider(lines[index + 1])) {
+      flushOpenBlocks();
+      index += 2;
+      const tableRows = [];
+      while (index < lines.length) {
+        const row = parsePreviewMarkdownTableRow(lines[index]);
+        if (row.length < 2 || isPreviewMarkdownTableDivider(lines[index])) break;
+        tableRows.push(row);
+        index += 1;
+      }
+      const columnCount = Math.max(tableHeader.length, ...tableRows.map((row) => row.length), 0);
+      const header = tableHeader.map((cell) => `<th scope="col">${renderPreviewMarkdownInline(cell)}</th>`).join("");
+      const body = tableRows.map((row) => `<tr>${Array.from({ length: columnCount }, (_, cellIndex) => `<td>${renderPreviewMarkdownInline(row[cellIndex] || "")}</td>`).join("")}</tr>`).join("");
+      blocks.push(`<table><thead><tr>${header}</tr></thead>${body ? `<tbody>${body}</tbody>` : ""}</table>`);
+      index -= 1;
+      continue;
+    }
     const heading = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
     if (heading) { flushOpenBlocks(); const level = heading[1].length; blocks.push(`<h${level}>${renderPreviewMarkdownInline(heading[2])}</h${level}>`); continue; }
     if (/^ {0,3}((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/.test(line)) { flushOpenBlocks(); blocks.push("<hr />"); continue; }
@@ -769,6 +900,33 @@ function renderPreviewMarkdownInline(value, preserveBreaks = false) {
   }
   output += escapeHtml(source.slice(cursor));
   return preserveBreaks ? output.replace(/\n/g, "<br />") : output;
+}
+
+function standalonePreviewImageUrl(value) {
+  const candidate = String(value || "").trim();
+  if (!candidate || /\s/.test(candidate) || !isPreviewImagePath(candidate)) return "";
+  return safeImageUrl(candidate);
+}
+
+function isPreviewImagePath(value) {
+  try {
+    const parsed = new URL(String(value), window.location.href);
+    return /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function parsePreviewMarkdownTableRow(value) {
+  const line = String(value || "").trim();
+  if (!line.includes("|")) return [];
+  const cells = line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  return cells.length > 1 ? cells : [];
+}
+
+function isPreviewMarkdownTableDivider(value) {
+  const cells = parsePreviewMarkdownTableRow(value);
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
 function safePreviewUrl(value) {
@@ -871,13 +1029,11 @@ async function handleClick(event) {
       return;
     }
     if (action === "set-project-preview") {
-      state.projectPreviewMode = button.dataset.previewMode === "back" ? "back" : "front";
-      document.querySelectorAll(".editor-preview-tab").forEach((tab) => {
-        const active = tab.dataset.previewMode === state.projectPreviewMode;
-        tab.classList.toggle("active", active);
-        tab.setAttribute("aria-selected", active ? "true" : "false");
-      });
-      updateProjectLivePreview(document.querySelector("form[data-form='project']"));
+      setProjectPreviewMode(button.dataset.previewMode, { scroll: true });
+      return;
+    }
+    if (action === "markdown-format") {
+      formatMarkdownEditor(button);
       return;
     }
     if (action === "close-modal" || action === "modal-backdrop") {
@@ -943,6 +1099,134 @@ function handleInput(event) {
     preview.dataset.mark = control.value.trim() || "指";
     updateCoverPreview(document.querySelector("[data-control='project-cover']")?.value || "");
   }
+}
+
+function formatMarkdownEditor(button) {
+  const textarea = button.closest("[data-markdown-toolbar]")?.parentElement?.querySelector("textarea.markdown-editor")
+    || document.querySelector("textarea.markdown-editor");
+  if (!textarea) return;
+  const command = button.dataset.markdownCommand || "";
+  if (command === "clear") {
+    textarea.focus({ preventScroll: true });
+    replaceMarkdownRange(textarea, 0, textarea.value.length, "", 0, 0);
+    return;
+  }
+
+  const value = textarea.value;
+  const start = textarea.selectionStart ?? value.length;
+  const end = textarea.selectionEnd ?? start;
+  const selected = value.slice(start, end);
+  const level = Number(button.dataset.markdownLevel || 1);
+  if (command === "heading") return formatMarkdownLines(textarea, start, end, (line, index, lines) => {
+    const nonEmpty = lines.filter((item) => item.trim());
+    const headingPattern = /^\s{0,3}#{1,6}\s+/;
+    const desiredPattern = new RegExp(`^\\s{0,3}#{${Math.min(6, Math.max(1, level))}}\\s+`);
+    const remove = nonEmpty.length > 0 && nonEmpty.every((item) => desiredPattern.test(item));
+    if (!line.trim()) return line;
+    const indent = (line.match(/^\s{0,3}/) || [""])[0];
+    const content = line.replace(headingPattern, "");
+    return remove ? content : `${indent}${"#".repeat(Math.min(6, Math.max(1, level)))} ${content}`;
+  }, { collapsedCaretOffset: "prefix" });
+  if (command === "quote") return formatMarkdownLines(textarea, start, end, (line, index, lines) => {
+    const nonEmpty = lines.filter((item) => item.trim());
+    const quotePattern = /^\s{0,3}>\s?/;
+    const remove = nonEmpty.length > 0 && nonEmpty.every((item) => quotePattern.test(item));
+    if (!line.trim()) return line;
+    return remove ? line.replace(quotePattern, "") : `> ${line.replace(quotePattern, "")}`;
+  }, { collapsedCaretOffset: "prefix" });
+  if (command === "unordered-list" || command === "ordered-list") {
+    const ordered = command === "ordered-list";
+    return formatMarkdownLines(textarea, start, end, (line, index, lines) => {
+      const nonEmpty = lines.filter((item) => item.trim());
+      const listPattern = /^\s*(?:[-+*]|\d+[.)])\s+/;
+      const desiredPattern = ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-+*]\s+/;
+      const remove = nonEmpty.length > 0 && nonEmpty.every((item) => desiredPattern.test(item));
+      if (!line.trim()) return line;
+      if (remove) return line.replace(listPattern, "");
+      const indent = (line.match(/^\s*/) || [""])[0];
+      const content = line.replace(listPattern, "").trim();
+      return `${indent}${ordered ? `${index + 1}.` : "-"} ${content}`;
+    }, { collapsedCaretOffset: "prefix" });
+  }
+  if (command === "bold" || command === "italic" || command === "strike" || command === "inline-code") {
+    const marker = command === "bold" ? "**" : command === "italic" ? "*" : command === "strike" ? "~~" : "`";
+    const placeholder = command === "bold" ? "粗体文本" : command === "italic" ? "斜体文本" : command === "strike" ? "删除文本" : "代码";
+    return formatMarkdownInline(textarea, start, end, marker, marker, selected || placeholder);
+  }
+  if (command === "code-block") {
+    const inner = selected.replace(/^\s*```[^\n]*\n?/, "").replace(/\n?\s*```\s*$/, "");
+    const alreadyFenced = /^\s*```[^\n]*\n[\s\S]*\n\s*```\s*$/.test(selected);
+    if (alreadyFenced) return replaceMarkdownRange(textarea, start, end, inner, 0, inner.length);
+    const content = inner || "代码";
+    const replacement = `\`\`\`\n${content}\n\`\`\``;
+    const contentOffset = 4;
+    return replaceMarkdownRange(textarea, start, end, replacement, selected ? 0 : contentOffset, selected ? replacement.length : contentOffset + content.length);
+  }
+  if (command === "link" || command === "image") {
+    const label = selected || (command === "link" ? "链接文字" : "图片描述");
+    const replacement = command === "link" ? `[${label}](https://example.com)` : `![${label}](https://example.com/image.jpg)`;
+    const urlStart = replacement.indexOf("https://");
+    return replaceMarkdownRange(textarea, start, end, replacement, urlStart, replacement.length - 1);
+  }
+  if (command === "table") {
+    const replacement = "| 列 1 | 列 2 | 列 3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |";
+    const tableStart = replacement.indexOf("列 1");
+    return replaceMarkdownRange(textarea, start, end, replacement, tableStart, tableStart + 3);
+  }
+  if (command === "hr") {
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    const prefix = before && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "";
+    const suffix = after && !after.startsWith("\n\n") ? (after.startsWith("\n") ? "\n" : "\n\n") : "";
+    const replacement = `${prefix}---${suffix}`;
+    return replaceMarkdownRange(textarea, start, end, replacement, prefix.length + 3, prefix.length + 3);
+  }
+}
+
+function formatMarkdownInline(textarea, start, end, prefix, suffix, content) {
+  const selected = textarea.value.slice(start, end);
+  const isWrapped = selected.length >= prefix.length + suffix.length
+    && selected.startsWith(prefix)
+    && selected.endsWith(suffix);
+  if (isWrapped) {
+    const unwrapped = selected.slice(prefix.length, selected.length - suffix.length);
+    return replaceMarkdownRange(textarea, start, end, unwrapped, 0, unwrapped.length);
+  }
+  const replacement = `${prefix}${content}${suffix}`;
+  return replaceMarkdownRange(textarea, start, end, replacement, prefix.length, prefix.length + content.length);
+}
+
+function formatMarkdownLines(textarea, start, end, transform, options = {}) {
+  const value = textarea.value;
+  const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  const selectionEnd = end > start && value[end - 1] === "\n" ? end - 1 : end;
+  const lineEndIndex = value.indexOf("\n", selectionEnd);
+  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+  const source = value.slice(lineStart, lineEnd);
+  const lines = source.split("\n");
+  const transformed = lines.map((line, index) => transform(line, index, lines));
+  const replacement = transformed.join("\n");
+  if (start === end) {
+    const firstLineBefore = lines[0];
+    const firstLineAfter = transformed[0];
+    const delta = firstLineAfter.length - firstLineBefore.length;
+    const caret = Math.max(lineStart, Math.min(lineEnd + delta, start + (options.collapsedCaretOffset === "prefix" ? delta : 0)));
+    return replaceMarkdownRange(textarea, lineStart, lineEnd, replacement, caret - lineStart, caret - lineStart);
+  }
+  return replaceMarkdownRange(textarea, lineStart, lineEnd, replacement, 0, replacement.length);
+}
+
+function replaceMarkdownRange(textarea, start, end, replacement, selectionOffset = replacement.length, selectionEndOffset = selectionOffset) {
+  if (typeof textarea.setRangeText === "function") {
+    textarea.setRangeText(replacement, start, end, "end");
+  } else {
+    textarea.value = `${textarea.value.slice(0, start)}${replacement}${textarea.value.slice(end)}`;
+  }
+  textarea.focus({ preventScroll: true });
+  const nextStart = Math.max(0, start + selectionOffset);
+  const nextEnd = Math.max(nextStart, start + selectionEndOffset);
+  textarea.setSelectionRange(nextStart, nextEnd);
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function handleKeydown(event) {

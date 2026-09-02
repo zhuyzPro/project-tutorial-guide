@@ -636,6 +636,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .preview-markdown blockquote p:last-child { margin-bottom: 0; }.preview-markdown hr { margin: 15px 0; border: 0; border-top: 1px solid var(--line); }
 .preview-markdown a { color: var(--blue); text-decoration: underline; }.preview-markdown code { padding: 1px 4px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-muted); color: var(--coral); font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 .preview-markdown pre { margin: 12px 0; overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); }.preview-markdown pre code { display: block; min-width: max-content; padding: 9px 10px; border: 0; background: transparent; color: var(--ink); white-space: pre; }
+.preview-markdown table { width: 100%; margin: 13px 0 16px; border-collapse: collapse; font-size: 0.92em; }
+.preview-markdown th, .preview-markdown td { padding: 7px 8px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+.preview-markdown th { background: var(--surface-muted); color: var(--ink); font-weight: 800; }
 .preview-markdown-image { display: block; max-width: 100%; height: auto; margin: 9px 0 12px; border: 1px solid var(--line); border-radius: 4px; }
 .preview-markdown-empty { color: var(--ink-faint); font-style: italic; }
 .preview-tips { display: flex; gap: 8px; margin: 15px 0; padding: 9px 10px; border-left: 3px solid var(--amber); background: var(--amber-soft); }.preview-tips > .lucide { width: 15px; height: 15px; flex: 0 0 auto; color: var(--amber); }.preview-tips strong { display: block; margin-bottom: 2px; font-size: 10px; }.preview-tips p { margin: 0; color: var(--ink-soft); font-size: 11px; }
@@ -688,6 +691,45 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .compact-button .lucide { width: 14px; height: 14px; }
 .editor-field-chip { flex: 0 0 auto; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink-faint); font-size: 10px; font-weight: 800; line-height: 1.2; white-space: nowrap; }
 .editor-inline-note { margin: 0; padding: 9px 11px; border-left: 3px solid var(--line-strong); background: var(--surface-muted); color: var(--ink-faint); font-size: 12px; }
+
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0 7px;
+  padding: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--surface-muted);
+}
+.markdown-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
+.markdown-toolbar-divider { width: 1px; height: 22px; flex: 0 0 auto; margin: 0 2px; background: var(--line-strong); }
+.markdown-tool-button {
+  display: inline-flex;
+  min-width: 31px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.markdown-tool-button:hover { border-color: var(--line-strong); background: var(--surface); color: var(--ink); }
+.markdown-tool-button:active { background: var(--pine-soft); color: var(--pine); }
+.markdown-tool-button--strong { font-size: 13px; }
+.markdown-tool-button--strong span { font-weight: 900; }
+.markdown-tool-button--emphasis { font-size: 13px; }
+.markdown-tool-button--emphasis span { font-style: italic; }
+.markdown-tool-button--strike span { text-decoration: line-through; }
+.markdown-tool-button--clear { color: var(--coral); }
+.markdown-tool-button--clear:hover { border-color: color-mix(in srgb, var(--coral) 40%, var(--line-strong)); background: var(--coral-soft); color: var(--coral); }
 
 .field--guide .markdown-editor {
   min-height: 320px;

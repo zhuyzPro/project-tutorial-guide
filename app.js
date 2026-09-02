@@ -138,7 +138,9 @@ function renderMarkdown(value) {
     flushQuote();
   };
 
-  for (const line of source.split("\n")) {
+  const lines = source.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const fence = line.match(/^ {0,3}```\s*([A-Za-z0-9_-]*)\s*$/);
     if (code) {
       if (fence) {
@@ -155,8 +157,32 @@ function renderMarkdown(value) {
       code = { language: fence[1], lines: [] };
       continue;
     }
+    const standaloneImage = standaloneMarkdownImageUrl(line);
+    if (standaloneImage) {
+      flushOpenBlocks();
+      blocks.push(`<img class="markdown-image" src="${escapeAttribute(standaloneImage)}" alt="正文图片" loading="lazy" decoding="async" />`);
+      continue;
+    }
     if (!line.trim()) {
       flushOpenBlocks();
+      continue;
+    }
+    const tableHeader = parseMarkdownTableRow(line);
+    if (tableHeader.length > 1 && index + 1 < lines.length && isMarkdownTableDivider(lines[index + 1])) {
+      flushOpenBlocks();
+      index += 2;
+      const tableRows = [];
+      while (index < lines.length) {
+        const row = parseMarkdownTableRow(lines[index]);
+        if (row.length < 2 || isMarkdownTableDivider(lines[index])) break;
+        tableRows.push(row);
+        index += 1;
+      }
+      const columnCount = Math.max(tableHeader.length, ...tableRows.map((row) => row.length), 0);
+      const header = tableHeader.map((cell) => `<th scope="col">${renderMarkdownInline(cell)}</th>`).join("");
+      const body = tableRows.map((row) => `<tr>${Array.from({ length: columnCount }, (_, cellIndex) => `<td>${renderMarkdownInline(row[cellIndex] || "")}</td>`).join("")}</tr>`).join("");
+      blocks.push(`<table><thead><tr>${header}</tr></thead>${body ? `<tbody>${body}</tbody>` : ""}</table>`);
+      index -= 1;
       continue;
     }
     const heading = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
@@ -226,6 +252,33 @@ function renderMarkdownInline(value, preserveBreaks = false) {
   }
   output += escapeHtml(source.slice(cursor));
   return preserveBreaks ? output.replace(/\n/g, "<br />") : output;
+}
+
+function standaloneMarkdownImageUrl(value) {
+  const candidate = String(value || "").trim();
+  if (!candidate || /\s/.test(candidate) || !isMarkdownImagePath(candidate)) return "";
+  return safeImageUrl(candidate);
+}
+
+function isMarkdownImagePath(value) {
+  try {
+    const parsed = new URL(String(value), window.location.href);
+    return /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function parseMarkdownTableRow(value) {
+  const line = String(value || "").trim();
+  if (!line.includes("|")) return [];
+  const cells = line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  return cells.length > 1 ? cells : [];
+}
+
+function isMarkdownTableDivider(value) {
+  const cells = parseMarkdownTableRow(value);
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
 function safeMarkdownUrl(value) {
