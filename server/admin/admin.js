@@ -12,6 +12,7 @@ const TONES = [
   ["coral", "珊瑚"],
 ];
 const DATA_VIEWS = new Set(["dashboard", "analytics-trend", "analytics-sources", "analytics-projects"]);
+const MARKDOWN_FONT_SIZES = new Set(["12", "14", "16", "18", "20", "24"]);
 
 const state = {
   session: null,
@@ -661,6 +662,7 @@ function renderProjectModal(link) {
                 <button class="markdown-tool-button markdown-tool-button--strong" type="button" data-action="markdown-format" data-markdown-command="bold" title="粗体" aria-label="粗体"><span aria-hidden="true">B</span></button>
                 <button class="markdown-tool-button markdown-tool-button--emphasis" type="button" data-action="markdown-format" data-markdown-command="italic" title="斜体" aria-label="斜体"><span aria-hidden="true">I</span></button>
                 <button class="markdown-tool-button markdown-tool-button--strike" type="button" data-action="markdown-format" data-markdown-command="strike" title="删除线" aria-label="删除线"><span aria-hidden="true">S</span></button>
+                <button class="markdown-tool-button markdown-tool-button--underline" type="button" data-action="markdown-format" data-markdown-command="underline" title="下划线" aria-label="下划线"><span aria-hidden="true">U</span></button>
                 <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="inline-code" title="行内代码" aria-label="行内代码"><span aria-hidden="true">&lt;/&gt;</span></button>
               </div>
               <span class="markdown-toolbar-divider" aria-hidden="true"></span>
@@ -669,6 +671,22 @@ function renderProjectModal(link) {
                 <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="unordered-list" title="无序列表" aria-label="无序列表"><span aria-hidden="true">- 列表</span></button>
                 <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="ordered-list" title="有序列表" aria-label="有序列表"><span aria-hidden="true">1. 列表</span></button>
               </div>
+              <span class="markdown-toolbar-divider" aria-hidden="true"></span>
+              <div class="markdown-toolbar-group" role="group" aria-label="段落对齐">
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="align-left" title="左对齐" aria-label="左对齐"><span aria-hidden="true">左对齐</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="align-center" title="居中对齐" aria-label="居中对齐"><span aria-hidden="true">居中</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="align-right" title="右对齐" aria-label="右对齐"><span aria-hidden="true">右对齐</span></button>
+                <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="align-justify" title="两端对齐" aria-label="两端对齐"><span aria-hidden="true">两端</span></button>
+              </div>
+              <select class="markdown-tool-select" data-markdown-command="font-size" title="字号" aria-label="字号">
+                <option value="">字号</option>
+                <option value="12">12 px</option>
+                <option value="14">14 px</option>
+                <option value="16">16 px</option>
+                <option value="18">18 px</option>
+                <option value="20">20 px</option>
+                <option value="24">24 px</option>
+              </select>
               <span class="markdown-toolbar-divider" aria-hidden="true"></span>
               <div class="markdown-toolbar-group" role="group" aria-label="媒体和结构">
                 <button class="markdown-tool-button" type="button" data-action="markdown-format" data-markdown-command="code-block" title="代码块" aria-label="代码块"><span aria-hidden="true">\`\`\`</span></button>
@@ -691,7 +709,7 @@ function renderProjectModal(link) {
 3. 更多步骤可以继续添加
 
 > 注意事项
-">${escapeHtml(guide)}</textarea><p class="field-help">支持标题、粗体、列表、链接、图片和代码块；不需要拆分成固定步骤。</p></div>
+">${escapeHtml(guide)}</textarea><p class="field-help">支持标题、粗体、斜体、下划线、对齐、字号、列表、链接、图片、表格和代码块；不需要拆分成固定步骤。</p></div>
           <div class="field wide field--cover"><label for="project-cover">封面图 URL</label><div class="cover-field-layout"><div><div class="cover-input-row"><input id="project-cover" name="cover" data-control="project-cover" maxlength="2048" value="${escapeAttribute(cover)}" placeholder="https://example.com/cover.jpg 或 /images/cover.jpg" /><button class="icon-button cover-clear" type="button" data-action="clear-cover" title="清除封面链接" aria-label="清除封面链接" ${cover ? "" : "disabled"}><i data-lucide="x" aria-hidden="true"></i></button></div><p class="field-help">仅用于后台列表和编辑预览的封面素材；支持 http、https 或站内路径。前台详情顶部不显示横幅封面。</p></div><div id="project-cover-preview" class="project-cover-preview" data-mark="${escapeAttribute(mark)}" aria-live="polite"><span class="cover-preview-mark">${escapeHtml(mark)}</span><span class="cover-preview-copy">${cover ? "正在加载预览" : "未设置封面"}</span></div></div></div>
           <div class="field wide field--tips"><label for="project-tips">小提示</label><textarea id="project-tips" name="tips" maxlength="2000" placeholder="提醒用户注意条件、时效或常见问题。">${escapeHtml(link.tips || "")}</textarea><p class="field-help">对应详情弹层底部的“小提示”区域。</p></div>
           <div class="field wide field--url"><label for="project-url">入口 URL</label><input id="project-url" name="url" type="url" maxlength="2048" value="${escapeAttribute(link.url || "")}" placeholder="https://example.com" /><p class="field-help">可选；填写后对应详情弹层底部的“打开项目入口”按钮。</p></div>
@@ -855,6 +873,29 @@ function renderPreviewMarkdown(value) {
       continue;
     }
     if (fence) { flushOpenBlocks(); code = []; continue; }
+    const inlineAlignment = line.match(/^\s*<div\s+align\s*=\s*["'](left|center|right|justify)["']\s*>([\s\S]*?)<\/div>\s*$/i);
+    const inlineCenter = line.match(/^\s*<center\s*>([\s\S]*?)<\/center>\s*$/i);
+    if (inlineAlignment || inlineCenter) {
+      flushOpenBlocks();
+      const alignment = inlineAlignment ? inlineAlignment[1].toLowerCase() : "center";
+      const content = inlineAlignment ? inlineAlignment[2] : inlineCenter[1];
+      blocks.push(`<div class="preview-markdown-align preview-markdown-align-${alignment}">${renderPreviewMarkdown(content)}</div>`);
+      continue;
+    }
+    const alignmentStart = line.match(/^\s*<div\s+align\s*=\s*["'](left|center|right|justify)["']\s*>\s*$/i);
+    const centerStart = line.match(/^\s*<center\s*>\s*$/i);
+    if (alignmentStart || centerStart) {
+      const closingPattern = centerStart ? /^\s*<\/center>\s*$/i : /^\s*<\/div>\s*$/i;
+      const closingIndex = lines.findIndex((candidate, candidateIndex) => candidateIndex > index && closingPattern.test(candidate));
+      if (closingIndex !== -1) {
+        flushOpenBlocks();
+        const alignment = alignmentStart ? alignmentStart[1].toLowerCase() : "center";
+        const content = renderPreviewMarkdown(lines.slice(index + 1, closingIndex).join("\n"));
+        blocks.push(`<div class="preview-markdown-align preview-markdown-align-${alignment}">${content}</div>`);
+        index = closingIndex;
+        continue;
+      }
+    }
     const standaloneImage = standalonePreviewImage(line);
     if (standaloneImage) {
       flushParagraph();
@@ -866,7 +907,8 @@ function renderPreviewMarkdown(value) {
     flushImageGroup();
     if (!line.trim()) { flushOpenBlocks(); continue; }
     const tableHeader = parsePreviewMarkdownTableRow(line);
-    if (tableHeader.length > 1 && index + 1 < lines.length && isPreviewMarkdownTableDivider(lines[index + 1])) {
+    const tableAlignment = index + 1 < lines.length ? parsePreviewMarkdownTableAlignment(lines[index + 1]) : [];
+    if (tableHeader.length > 1 && tableAlignment.length > 1) {
       flushOpenBlocks();
       index += 2;
       const tableRows = [];
@@ -877,9 +919,11 @@ function renderPreviewMarkdown(value) {
         index += 1;
       }
       const columnCount = Math.max(tableHeader.length, ...tableRows.map((row) => row.length), 0);
-      const header = tableHeader.map((cell) => `<th scope="col">${renderPreviewMarkdownInline(cell)}</th>`).join("");
-      const body = tableRows.map((row) => `<tr>${Array.from({ length: columnCount }, (_, cellIndex) => `<td>${renderPreviewMarkdownInline(row[cellIndex] || "")}</td>`).join("")}</tr>`).join("");
-      blocks.push(`<table><thead><tr>${header}</tr></thead>${body ? `<tbody>${body}</tbody>` : ""}</table>`);
+      const columnAlignments = tableAlignment.length ? tableAlignment : tableHeader.map(() => "left");
+      const cellClass = (cellIndex) => `preview-markdown-cell-align-${columnAlignments[cellIndex] || "left"}`;
+      const header = tableHeader.map((cell, cellIndex) => `<th class="${cellClass(cellIndex)}" scope="col">${renderPreviewMarkdownInline(cell)}</th>`).join("");
+      const body = tableRows.map((row) => `<tr>${Array.from({ length: columnCount }, (_, cellIndex) => `<td class="${cellClass(cellIndex)}">${renderPreviewMarkdownInline(row[cellIndex] || "")}</td>`).join("")}</tr>`).join("");
+      blocks.push(`<div class="preview-markdown-table-wrap"><table><thead><tr>${header}</tr></thead>${body ? `<tbody>${body}</tbody>` : ""}</table></div>`);
       index -= 1;
       continue;
     }
@@ -901,7 +945,7 @@ function renderPreviewMarkdown(value) {
 
 function renderPreviewMarkdownInline(value, preserveBreaks = false) {
   const source = String(value || "");
-  const tokenPattern = /!\[([^\]]*)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|\[([^\]]+)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|\*([^*]+)\*|_([^_]+)_/g;
+  const tokenPattern = /!\[([^\]]*)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|\[([^\]]+)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|<u>([\s\S]*?)<\/u>|<ins>([\s\S]*?)<\/ins>|<span\s+style\s*=\s*["']\s*font-size\s*:\s*(12|14|16|18|20|24)px\s*;?\s*["']\s*>([\s\S]*?)<\/span>|\*([^*]+)\*|_([^_]+)_/gi;
   let output = "";
   let cursor = 0;
   let match;
@@ -916,7 +960,10 @@ function renderPreviewMarkdownInline(value, preserveBreaks = false) {
     } else if (match[7] !== undefined) output += `<code>${escapeHtml(match[7])}</code>`;
     else if (match[8] !== undefined || match[9] !== undefined) output += `<strong>${escapeHtml(match[8] || match[9])}</strong>`;
     else if (match[10] !== undefined) output += `<del>${escapeHtml(match[10])}</del>`;
-    else output += `<em>${escapeHtml(match[11] || match[12])}</em>`;
+    else if (match[11] !== undefined) output += `<u>${renderPreviewMarkdownInline(match[11])}</u>`;
+    else if (match[12] !== undefined) output += `<u>${renderPreviewMarkdownInline(match[12])}</u>`;
+    else if (match[13] !== undefined) output += `<span class="preview-markdown-size preview-markdown-size-${match[13]}">${renderPreviewMarkdownInline(match[14])}</span>`;
+    else output += `<em>${escapeHtml(match[15] || match[16])}</em>`;
     cursor = tokenPattern.lastIndex;
   }
   output += escapeHtml(source.slice(cursor));
@@ -951,13 +998,55 @@ function isPreviewImagePath(value) {
 function parsePreviewMarkdownTableRow(value) {
   const line = String(value || "").trim();
   if (!line.includes("|")) return [];
-  const cells = line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  const cells = [];
+  let cell = "";
+  let backslashCount = 0;
+  for (const character of line) {
+    if (character === "\\") {
+      backslashCount += 1;
+      cell += character;
+      continue;
+    }
+    if (character === "|" && backslashCount % 2 === 0) {
+      cells.push(cell.trim());
+      cell = "";
+      backslashCount = 0;
+      continue;
+    }
+    if (character === "|" && backslashCount % 2 === 1) {
+      cell = `${cell.slice(0, -1)}|`;
+      backslashCount = 0;
+      continue;
+    }
+    backslashCount = 0;
+    cell += character;
+  }
+  cells.push(cell.trim());
+  if (line.startsWith("|")) cells.shift();
+  if (line.endsWith("|") && !isPreviewMarkdownEscapedPipe(line, line.length - 1)) cells.pop();
   return cells.length > 1 ? cells : [];
 }
 
 function isPreviewMarkdownTableDivider(value) {
+  return parsePreviewMarkdownTableAlignment(value).length > 1;
+}
+
+function parsePreviewMarkdownTableAlignment(value) {
   const cells = parsePreviewMarkdownTableRow(value);
-  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  if (cells.length < 2 || !cells.every((cell) => /^:?-{3,}:?$/.test(cell))) return [];
+  return cells.map((cell) => {
+    const normalized = cell.trim();
+    if (normalized.startsWith(":") && normalized.endsWith(":")) return "center";
+    if (normalized.startsWith(":")) return "left";
+    if (normalized.endsWith(":")) return "right";
+    return "left";
+  });
+}
+
+function isPreviewMarkdownEscapedPipe(value, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) slashCount += 1;
+  return slashCount % 2 === 1;
 }
 
 function safePreviewUrl(value) {
@@ -1112,6 +1201,13 @@ async function handleSubmit(event) {
 
 function handleChange(event) {
   const control = event.target;
+  if (control.matches("[data-markdown-command='font-size']")) {
+    formatMarkdownFontSize(control);
+    control.value = "";
+    const projectForm = control.closest("form[data-form='project']");
+    if (projectForm) updateProjectLivePreview(projectForm);
+    return;
+  }
   const projectForm = control.closest("form[data-form='project']");
   if (projectForm) updateProjectLivePreview(projectForm);
 }
@@ -1179,10 +1275,14 @@ function formatMarkdownEditor(button) {
       return `${indent}${ordered ? `${index + 1}.` : "-"} ${content}`;
     }, { collapsedCaretOffset: "prefix" });
   }
-  if (command === "bold" || command === "italic" || command === "strike" || command === "inline-code") {
-    const marker = command === "bold" ? "**" : command === "italic" ? "*" : command === "strike" ? "~~" : "`";
-    const placeholder = command === "bold" ? "粗体文本" : command === "italic" ? "斜体文本" : command === "strike" ? "删除文本" : "代码";
-    return formatMarkdownInline(textarea, start, end, marker, marker, selected || placeholder);
+  if (["align-left", "align-center", "align-right", "align-justify"].includes(command)) {
+    return formatMarkdownAlignment(textarea, start, end, command.slice("align-".length));
+  }
+  if (command === "bold" || command === "italic" || command === "strike" || command === "underline" || command === "inline-code") {
+    const marker = command === "bold" ? "**" : command === "italic" ? "*" : command === "strike" ? "~~" : command === "underline" ? "<u>" : "`";
+    const suffix = command === "underline" ? "</u>" : marker;
+    const placeholder = command === "bold" ? "粗体文本" : command === "italic" ? "斜体文本" : command === "strike" ? "删除文本" : command === "underline" ? "下划线文本" : "代码";
+    return formatMarkdownInline(textarea, start, end, marker, suffix, selected || placeholder);
   }
   if (command === "code-block") {
     const inner = selected.replace(/^\s*```[^\n]*\n?/, "").replace(/\n?\s*```\s*$/, "");
@@ -1212,6 +1312,70 @@ function formatMarkdownEditor(button) {
     const replacement = `${prefix}---${suffix}`;
     return replaceMarkdownRange(textarea, start, end, replacement, prefix.length + 3, prefix.length + 3);
   }
+}
+
+function formatMarkdownFontSize(select) {
+  const rawSize = String(select?.value || "").trim();
+  if (!MARKDOWN_FONT_SIZES.has(rawSize)) return;
+  const textarea = select.closest("[data-markdown-toolbar]")?.parentElement?.querySelector("textarea.markdown-editor")
+    || document.querySelector("textarea.markdown-editor");
+  if (!textarea) return;
+  const value = textarea.value;
+  const start = textarea.selectionStart ?? value.length;
+  const end = textarea.selectionEnd ?? start;
+  const selected = value.slice(start, end);
+  const wrapped = selected.match(/^<span\s+style\s*=\s*["']\s*font-size\s*:\s*(12|14|16|18|20|24)px\s*;?\s*["']\s*>([\s\S]*)<\/span>$/i);
+  if (wrapped) {
+    if (wrapped[1] === rawSize) {
+      replaceMarkdownRange(textarea, start, end, wrapped[2], 0, wrapped[2].length);
+      return;
+    }
+    const replacement = `<span style="font-size:${rawSize}px">${wrapped[2]}</span>`;
+    const contentOffset = replacement.indexOf(">") + 1;
+    replaceMarkdownRange(textarea, start, end, replacement, contentOffset, contentOffset + wrapped[2].length);
+    return;
+  }
+  const content = selected || "字号文本";
+  const replacement = `<span style="font-size:${rawSize}px">${content}</span>`;
+  const contentOffset = replacement.indexOf(">") + 1;
+  replaceMarkdownRange(textarea, start, end, replacement, contentOffset, contentOffset + content.length);
+}
+
+function formatMarkdownAlignment(textarea, start, end, align) {
+  const value = textarea.value;
+  const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  const selectionEnd = end > start && value[end - 1] === "\n" ? end - 1 : end;
+  const lineEndIndex = value.indexOf("\n", selectionEnd);
+  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+  const source = value.slice(lineStart, lineEnd);
+  const wrapper = source.match(/^\s*<div\s+align\s*=\s*["'](left|center|right|justify)["']\s*>\n([\s\S]*?)\n<\/div>\s*$/i);
+
+  if (wrapper) {
+    const inner = wrapper[2];
+    if (wrapper[1].toLowerCase() === align) {
+      return replaceMarkdownRange(textarea, lineStart, lineEnd, inner, 0, inner.length);
+    }
+    const replacement = source.replace(/(<div\s+align\s*=\s*["'])(left|center|right|justify)(["']\s*>)/i, `$1${align}$3`);
+    return replaceMarkdownRange(textarea, lineStart, lineEnd, replacement, 0, replacement.length);
+  }
+
+  if (start === end && !source.trim()) {
+    const replacement = `<div align="${align}">\n\n</div>`;
+    const caret = replacement.indexOf("\n") + 1;
+    return replaceMarkdownRange(textarea, lineStart, lineEnd, replacement, caret, caret);
+  }
+
+  const content = source.trim() ? source : "文本";
+  const replacement = `<div align="${align}">\n${content}\n</div>`;
+  const contentOffset = replacement.indexOf("\n") + 1;
+  return replaceMarkdownRange(
+    textarea,
+    lineStart,
+    lineEnd,
+    replacement,
+    contentOffset,
+    contentOffset + content.length,
+  );
 }
 
 function formatMarkdownInline(textarea, start, end, prefix, suffix, content) {

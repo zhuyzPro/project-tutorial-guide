@@ -139,6 +139,26 @@ function legacyStepsToMarkdown(rawSteps) {
   }).filter(Boolean).join("\n\n");
 }
 
+function parseMarkdownAlignmentInline(value) {
+  const source = String(value || "");
+  const div = source.match(/^\s*<div\s+align\s*=\s*["'](left|center|right|justify)["']\s*>([\s\S]*?)<\/div>\s*$/i);
+  if (div) return { alignment: div[1].toLowerCase(), content: div[2] };
+  const styledDiv = source.match(/^\s*<div\s+style\s*=\s*["']text-align\s*:\s*(left|center|right|justify)\s*;?\s*["']\s*>([\s\S]*?)<\/div>\s*$/i);
+  if (styledDiv) return { alignment: styledDiv[1].toLowerCase(), content: styledDiv[2] };
+  const center = source.match(/^\s*<center\s*>([\s\S]*?)<\/center>\s*$/i);
+  return center ? { alignment: "center", content: center[1] } : null;
+}
+
+function parseMarkdownAlignmentStart(value) {
+  const source = String(value || "");
+  const div = source.match(/^\s*<div\s+align\s*=\s*["'](left|center|right|justify)["']\s*>\s*$/i);
+  if (div) return { alignment: div[1].toLowerCase(), closing: /^\s*<\/div>\s*$/i };
+  const styledDiv = source.match(/^\s*<div\s+style\s*=\s*["']text-align\s*:\s*(left|center|right|justify)\s*;?\s*["']\s*>\s*$/i);
+  if (styledDiv) return { alignment: styledDiv[1].toLowerCase(), closing: /^\s*<\/div>\s*$/i };
+  if (/^\s*<center\s*>\s*$/i.test(source)) return { alignment: "center", closing: /^\s*<\/center>\s*$/i };
+  return null;
+}
+
 function renderMarkdown(value) {
   const source = String(value || "").replace(/\r\n?/g, "\n").trim();
   if (!source) return "";
@@ -198,6 +218,25 @@ function renderMarkdown(value) {
       code = { language: fence[1], lines: [] };
       continue;
     }
+    const inlineAlignment = parseMarkdownAlignmentInline(line);
+    if (inlineAlignment) {
+      flushOpenBlocks();
+      const alignment = inlineAlignment.alignment;
+      blocks.push(`<div class="markdown-align markdown-align-${alignment}">${renderMarkdown(inlineAlignment.content)}</div>`);
+      continue;
+    }
+    const alignmentStart = parseMarkdownAlignmentStart(line);
+    if (alignmentStart) {
+      const closingIndex = lines.findIndex((candidate, candidateIndex) => candidateIndex > index && alignmentStart.closing.test(candidate));
+      if (closingIndex !== -1) {
+        flushOpenBlocks();
+        const alignment = alignmentStart.alignment;
+        const content = renderMarkdown(lines.slice(index + 1, closingIndex).join("\n"));
+        blocks.push(`<div class="markdown-align markdown-align-${alignment}">${content}</div>`);
+        index = closingIndex;
+        continue;
+      }
+    }
     const standaloneImage = standaloneMarkdownImage(line);
     if (standaloneImage) {
       flushParagraph();
@@ -214,6 +253,7 @@ function renderMarkdown(value) {
     const tableHeader = parseMarkdownTableRow(line);
     if (tableHeader.length > 1 && index + 1 < lines.length && isMarkdownTableDivider(lines[index + 1])) {
       flushOpenBlocks();
+      const tableDivider = parseMarkdownTableRow(lines[index + 1]);
       index += 2;
       const tableRows = [];
       while (index < lines.length) {
@@ -223,9 +263,16 @@ function renderMarkdown(value) {
         index += 1;
       }
       const columnCount = Math.max(tableHeader.length, ...tableRows.map((row) => row.length), 0);
-      const header = tableHeader.map((cell) => `<th scope="col">${renderMarkdownInline(cell)}</th>`).join("");
-      const body = tableRows.map((row) => `<tr>${Array.from({ length: columnCount }, (_, cellIndex) => `<td>${renderMarkdownInline(row[cellIndex] || "")}</td>`).join("")}</tr>`).join("");
-      blocks.push(`<table><thead><tr>${header}</tr></thead>${body ? `<tbody>${body}</tbody>` : ""}</table>`);
+      const header = Array.from({ length: columnCount }, (_, cellIndex) => {
+        const cell = tableHeader[cellIndex] || "";
+        const alignment = markdownTableAlignment(tableDivider[cellIndex]);
+        return `<th scope="col"${alignment ? ` class="markdown-table-${alignment}"` : ""}>${renderMarkdownInline(cell)}</th>`;
+      }).join("");
+      const body = tableRows.map((row) => `<tr>${Array.from({ length: columnCount }, (_, cellIndex) => {
+        const alignment = markdownTableAlignment(tableDivider[cellIndex]);
+        return `<td${alignment ? ` class="markdown-table-${alignment}"` : ""}>${renderMarkdownInline(row[cellIndex] || "")}</td>`;
+      }).join("")}</tr>`).join("");
+      blocks.push(`<div class="markdown-table-wrap"><table><thead><tr>${header}</tr></thead>${body ? `<tbody>${body}</tbody>` : ""}</table></div>`);
       index -= 1;
       continue;
     }
@@ -272,7 +319,7 @@ function renderMarkdown(value) {
 
 function renderMarkdownInline(value, preserveBreaks = false) {
   const source = String(value || "");
-  const tokenPattern = /!\[([^\]]*)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|\[([^\]]+)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|\*([^*]+)\*|_([^_]+)_/g;
+  const tokenPattern = /!\[([^\]]*)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|\[([^\]]+)\]\(([^\s]+)(?:\s+["']([^"']*)["'])?\)|`([^`]+)`|<u\s*>([\s\S]*?)<\/u\s*>|\+\+([^+]+)\+\+|<span\s+style\s*=\s*["']font-size\s*:\s*(12|14|16|18|20|24)px\s*;?\s*["']\s*>([\s\S]*?)<\/span\s*>|<span\s+data-font-size\s*=\s*["'](12|14|16|18|20|24)["']\s*>([\s\S]*?)<\/span\s*>|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|\*([^*]+)\*|_([^_]+)_/gi;
   let output = "";
   let cursor = 0;
   let match;
@@ -287,9 +334,14 @@ function renderMarkdownInline(value, preserveBreaks = false) {
         ? `<a href="${escapeAttribute(linkUrl)}"${match[6] ? ` title="${escapeAttribute(match[6])}"` : ""} target="_blank" rel="noopener noreferrer">${escapeHtml(match[4])}</a>`
         : escapeHtml(match[4]);
     } else if (match[7] !== undefined) output += `<code>${escapeHtml(match[7])}</code>`;
-    else if (match[8] !== undefined || match[9] !== undefined) output += `<strong>${escapeHtml(match[8] || match[9])}</strong>`;
-    else if (match[10] !== undefined) output += `<del>${escapeHtml(match[10])}</del>`;
-    else output += `<em>${escapeHtml(match[11] || match[12])}</em>`;
+    else if (match[8] !== undefined || match[9] !== undefined) output += `<u>${renderMarkdownInline(match[8] || match[9], preserveBreaks)}</u>`;
+    else if (match[10] !== undefined || match[12] !== undefined) {
+      const size = match[10] || match[12];
+      const content = match[11] !== undefined ? match[11] : match[13];
+      output += `<span class="markdown-font-size" style="font-size:${size}px">${renderMarkdownInline(content, preserveBreaks)}</span>`;
+    } else if (match[14] !== undefined || match[15] !== undefined) output += `<strong>${renderMarkdownInline(match[14] || match[15], preserveBreaks)}</strong>`;
+    else if (match[16] !== undefined) output += `<del>${renderMarkdownInline(match[16], preserveBreaks)}</del>`;
+    else output += `<em>${renderMarkdownInline(match[17] || match[18], preserveBreaks)}</em>`;
     cursor = tokenPattern.lastIndex;
   }
   output += escapeHtml(source.slice(cursor));
@@ -329,8 +381,47 @@ function isMarkdownImagePath(value) {
 function parseMarkdownTableRow(value) {
   const line = String(value || "").trim();
   if (!line.includes("|")) return [];
-  const cells = line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  const cells = [];
+  let cell = "";
+  let backslashCount = 0;
+  for (const character of line) {
+    if (character === "\\") {
+      backslashCount += 1;
+      cell += character;
+      continue;
+    }
+    if (character === "|" && backslashCount % 2 === 0) {
+      cells.push(cell.trim());
+      cell = "";
+      backslashCount = 0;
+      continue;
+    }
+    if (character === "|" && backslashCount % 2 === 1) {
+      cell = `${cell.slice(0, -1)}|`;
+      backslashCount = 0;
+      continue;
+    }
+    backslashCount = 0;
+    cell += character;
+  }
+  cells.push(cell.trim());
+  if (line.startsWith("|")) cells.shift();
+  if (line.endsWith("|") && !isMarkdownTableEscapedPipe(line, line.length - 1)) cells.pop();
   return cells.length > 1 ? cells : [];
+}
+
+function isMarkdownTableEscapedPipe(value, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) slashCount += 1;
+  return slashCount % 2 === 1;
+}
+
+function markdownTableAlignment(value) {
+  const divider = String(value || "").trim();
+  if (/^:-{3,}:$/.test(divider)) return "align-center";
+  if (/^-{3,}:$/.test(divider)) return "align-right";
+  if (/^:-{3,}$/.test(divider)) return "align-left";
+  return "";
 }
 
 function isMarkdownTableDivider(value) {
